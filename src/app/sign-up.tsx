@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { colors, fonts, spacing } from '../lib/theme';
+import { ui } from '../lib/ui';
 
 type Role = 'customer' | 'professional';
 type Profession = 'barber' | 'hairdresser' | 'makeup_artist' | 'nail_artist';
@@ -70,74 +72,76 @@ export default function SignUp() {
       return;
     }
 
-        router.replace(role === 'customer' ? '/customer' : '/professional');
-
+    router.replace(role === 'customer' ? '/customer' : '/professional');
   }
 
   return (
     <KeyboardAvoidingView
-      style={styles.screen}
+      style={ui.screen}
       behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Create your account</Text>
+      <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+        <Text style={ui.title}>Create your account</Text>
 
-        <Text style={styles.label}>I am a</Text>
+        <Text style={ui.label}>I am a</Text>
         <View style={styles.row}>
-          <Pressable
-            style={[styles.choice, role === 'customer' && styles.choiceSelected]}
-            onPress={() => setRole('customer')}
-          >
-            <Text style={[styles.choiceText, role === 'customer' && styles.choiceTextSelected]}>Customer</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.choice, role === 'professional' && styles.choiceSelected]}
-            onPress={() => setRole('professional')}
-          >
-            <Text style={[styles.choiceText, role === 'professional' && styles.choiceTextSelected]}>Professional</Text>
-          </Pressable>
+          {(['customer', 'professional'] as Role[]).map((r) => (
+            <Pressable
+              key={r}
+              style={[styles.roleCard, role === r && styles.roleCardSelected]}
+              onPress={() => setRole(r)}
+            >
+              <Text style={[styles.roleTitle, role === r && styles.roleTitleSelected]}>
+                {r === 'customer' ? 'Customer' : 'Professional'}
+              </Text>
+              <Text style={[styles.roleHint, role === r && styles.roleHintSelected]}>
+                {r === 'customer' ? 'I want to book' : 'I offer services'}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
         {role === 'professional' && (
           <>
-            <Text style={styles.label}>What do you do?</Text>
+            <Text style={ui.label}>What do you do?</Text>
             <View style={styles.wrap}>
               {professions.map((p) => (
                 <Pressable
                   key={p.value}
-                  style={[styles.choice, profession === p.value && styles.choiceSelected]}
+                  style={[ui.chip, profession === p.value && ui.chipSelected]}
                   onPress={() => setProfession(p.value)}
                 >
-                  <Text style={[styles.choiceText, profession === p.value && styles.choiceTextSelected]}>{p.label}</Text>
+                  <Text style={[ui.chipText, profession === p.value && ui.chipTextSelected]}>{p.label}</Text>
                 </Pressable>
               ))}
             </View>
           </>
         )}
 
-        <Text style={styles.label}>First name</Text>
-        <TextInput style={styles.input} value={firstName} onChangeText={setFirstName} />
+        <Text style={ui.label}>First name</Text>
+        <TextInput style={ui.input} value={firstName} onChangeText={setFirstName} />
 
-        <Text style={styles.label}>Last name</Text>
-        <TextInput style={styles.input} value={lastName} onChangeText={setLastName} />
+        <Text style={ui.label}>Last name</Text>
+        <TextInput style={ui.input} value={lastName} onChangeText={setLastName} />
 
-        <Text style={styles.label}>Email</Text>
+        <Text style={ui.label}>Email</Text>
         <TextInput
-          style={styles.input}
+          style={ui.input}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
         />
 
-        <Text style={styles.label}>Password</Text>
-        <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+        <Text style={ui.label}>Password</Text>
+        <TextInput style={ui.input} value={password} onChangeText={setPassword} secureTextEntry />
+        <Text style={ui.help}>At least 6 characters.</Text>
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={ui.error}>{error}</Text>}
 
-        <Pressable style={[styles.button, loading && styles.buttonDisabled]} onPress={handleSignUp} disabled={loading}>
-          {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Create account</Text>}
+        <Pressable style={[ui.button, loading && ui.buttonDisabled]} onPress={handleSignUp} disabled={loading}>
+          {loading ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Create account</Text>}
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -145,19 +149,12 @@ export default function SignUp() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  title: { fontSize: 26, fontWeight: '700', color: '#000000', marginBottom: 16 },
-  label: { fontSize: 14, color: '#333333', marginTop: 16, marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, padding: 12, fontSize: 16, color: '#000000' },
-  row: { flexDirection: 'row', gap: 8 },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  choice: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  choiceSelected: { backgroundColor: '#000000', borderColor: '#000000' },
-  choiceText: { color: '#000000' },
-  choiceTextSelected: { color: '#ffffff' },
-  error: { color: '#c62828', marginTop: 16 },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 24 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  row: { flexDirection: 'row', gap: spacing.md },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  roleCard: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg },
+  roleCardSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accentDark },
+  roleTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  roleTitleSelected: { color: colors.accentDark },
+  roleHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  roleHintSelected: { color: colors.accentDark },
 });

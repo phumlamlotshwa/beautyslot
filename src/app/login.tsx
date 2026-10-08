@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput } from 'react-native';
 import { getRole } from '../lib/get-role';
 import { supabase } from '../lib/supabase';
+import { colors } from '../lib/theme';
+import { ui } from '../lib/ui';
 
 export default function LogIn() {
   const [email, setEmail] = useState('');
@@ -46,43 +48,31 @@ export default function LogIn() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.screen}
+      style={ui.screen}
       behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Welcome back</Text>
+      <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+        <Text style={ui.title}>Welcome back</Text>
 
-        <Text style={styles.label}>Email</Text>
+        <Text style={ui.label}>Email</Text>
         <TextInput
-          style={styles.input}
+          style={ui.input}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
         />
 
-        <Text style={styles.label}>Password</Text>
-        <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+        <Text style={ui.label}>Password</Text>
+        <TextInput style={ui.input} value={password} onChangeText={setPassword} secureTextEntry />
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={ui.error}>{error}</Text>}
 
-        <Pressable style={[styles.button, loading && styles.buttonDisabled]} onPress={handleLogIn} disabled={loading}>
-          {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Log in</Text>}
+        <Pressable style={[ui.button, loading && ui.buttonDisabled]} onPress={handleLogIn} disabled={loading}>
+          {loading ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Log in</Text>}
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  title: { fontSize: 26, fontWeight: '700', color: '#000000', marginBottom: 16 },
-  label: { fontSize: 14, color: '#333333', marginTop: 16, marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, padding: 12, fontSize: 16, color: '#000000' },
-  error: { color: '#c62828', marginTop: 16 },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 24 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-});
