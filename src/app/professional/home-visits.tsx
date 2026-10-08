@@ -1,18 +1,26 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Toggle } from '../../components/toggle';
 import { AddressInput } from '../../components/address-input';
+import { formatPrice } from '../../lib/format';
 import { Place } from '../../lib/maps';
 import { supabase } from '../../lib/supabase';
+import { colors, fonts, radius, spacing } from '../../lib/theme';
+import { ui } from '../../lib/ui';
 
 function toNumber(text: string) {
   return Number(text.replace(',', '.'));
 }
 
+const PREVIEW_DISTANCES = [5, 15, 30];
+
 export default function HomeVisits() {
   const [base, setBase] = useState<Place | null>(null);
   const [savedArea, setSavedArea] = useState('');
   const [baseFee, setBaseFee] = useState('');
+  const [chargeByDistance, setChargeByDistance] = useState(false);
   const [includedKm, setIncludedKm] = useState('');
   const [perKm, setPerKm] = useState('');
   const [maxKm, setMaxKm] = useState('');
@@ -49,9 +57,13 @@ export default function HomeVisits() {
 
         if (professional) {
           setBaseFee(String(professional.call_out_fee));
-          setIncludedKm(String(professional.call_out_included_km));
-          setPerKm(String(professional.call_out_per_km));
           setMaxKm(professional.max_travel_km !== null ? String(professional.max_travel_km) : '');
+
+          if (Number(professional.call_out_per_km) > 0) {
+            setChargeByDistance(true);
+            setIncludedKm(String(professional.call_out_included_km));
+            setPerKm(String(professional.call_out_per_km));
+          }
         }
       }
 
@@ -63,13 +75,15 @@ export default function HomeVisits() {
 
   const area = base?.area || savedArea;
 
+  const fee = toNumber(baseFee);
+  const included = chargeByDistance ? toNumber(includedKm || '0') : 0;
+  const rate = chargeByDistance ? toNumber(perKm) : 0;
+  const max = maxKm.trim() === '' ? null : toNumber(maxKm);
+  const pricingValid =
+    baseFee !== '' && !isNaN(fee) && (!chargeByDistance || (perKm !== '' && !isNaN(rate) && !isNaN(included)));
+
   async function handleSave() {
     setError(null);
-
-    const fee = toNumber(baseFee);
-    const included = toNumber(includedKm);
-    const rate = toNumber(perKm);
-    const max = maxKm.trim() === '' ? null : toNumber(maxKm);
 
     if (!base) {
       setError('Please search for your address and choose it from the list.');
@@ -79,13 +93,15 @@ export default function HomeVisits() {
       setError('Please enter your call-out fee. Use 0 if you don\u2019t charge one.');
       return;
     }
-    if (includedKm === '' || isNaN(included) || included < 0) {
-      setError('Please enter how many km your call-out fee covers. Use 0 if it covers none.');
-      return;
-    }
-    if (perKm === '' || isNaN(rate) || rate < 0) {
-      setError('Please enter your charge per extra km. Use 0 if you don\u2019t charge extra.');
-      return;
+    if (chargeByDistance) {
+      if (perKm === '' || isNaN(rate) || rate <= 0) {
+        setError('Please enter your charge per extra km, or switch off charging extra for distance.');
+        return;
+      }
+      if (isNaN(included) || included < 0) {
+        setError('Please enter how many km your call-out fee covers, or leave it empty for none.');
+        return;
+      }
     }
     if (max !== null && (isNaN(max) || max <= 0)) {
       setError('Please enter a maximum distance above 0, or leave it empty for no limit.');
@@ -139,51 +155,107 @@ export default function HomeVisits() {
 
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      style={styles.screen}
+      style={ui.screen}
       behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>Where do you work from?</Text>
-        <Text style={styles.help}>
-          Your full address is private. Customers only see your area.
-        </Text>
-        <AddressInput value={base} onChange={setBase} />
-        {area ? <Text style={styles.areaText}>Customers will see: {area}</Text> : null}
+      <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <Ionicons name="location-outline" size={20} color={colors.accentDark} />
+            <Text style={styles.cardTitle}>Where you work from</Text>
+          </View>
+          <Text style={styles.cardHelp}>Your full address is private. Customers only see your area.</Text>
+          <AddressInput value={base} onChange={setBase} />
+          {area ? (
+            <View style={styles.areaRow}>
+              <Ionicons name="eye-outline" size={15} color={colors.accentDark} />
+              <Text style={styles.areaText}>Customers will see: {area}</Text>
+            </View>
+          ) : null}
+        </View>
 
-        <Text style={styles.sectionTitle}>Home visit pricing</Text>
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <Ionicons name="car-outline" size={20} color={colors.accentDark} />
+            <Text style={styles.cardTitle}>Home visit pricing</Text>
+          </View>
 
-        <Text style={styles.label}>Call-out fee (R)</Text>
-        <Text style={styles.help}>Added to every home visit.</Text>
-        <TextInput style={styles.input} value={baseFee} onChangeText={setBaseFee} keyboardType="decimal-pad" />
+          <Text style={styles.fieldLabel}>Call-out fee (R)</Text>
+          <TextInput style={ui.input} value={baseFee} onChangeText={setBaseFee} keyboardType="decimal-pad" />
+          <Text style={styles.fieldHelp}>Added to every home visit. Enter 0 if you don't charge one.</Text>
 
-        <Text style={styles.label}>Distance covered by the call-out fee (km)</Text>
-        <TextInput style={styles.input} value={includedKm} onChangeText={setIncludedKm} keyboardType="decimal-pad" />
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Charge extra for longer distances</Text>
+              <Text style={styles.fieldHelp}>Off means everyone pays the same call-out fee.</Text>
+            </View>
+            <Toggle value={chargeByDistance} onValueChange={setChargeByDistance} />
+          </View>
 
-        <Text style={styles.label}>Charge per extra km (R)</Text>
-        <Text style={styles.help}>Added for each km beyond the distance above.</Text>
-        <TextInput style={styles.input} value={perKm} onChangeText={setPerKm} keyboardType="decimal-pad" />
+          {chargeByDistance && (
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>Fee covers the first (km)</Text>
+                <TextInput
+                  style={ui.input}
+                  value={includedKm}
+                  onChangeText={setIncludedKm}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textFaint}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>Per extra km (R)</Text>
+                <TextInput style={ui.input} value={perKm} onChangeText={setPerKm} keyboardType="decimal-pad" />
+              </View>
+            </View>
+          )}
 
-        <Text style={styles.label}>Maximum distance you travel (km)</Text>
-        <Text style={styles.help}>Customers further away can't book you for home visits. Leave empty for no limit.</Text>
-        <TextInput style={styles.input} value={maxKm} onChangeText={setMaxKm} keyboardType="decimal-pad" />
+          <Text style={[styles.fieldLabel, { marginTop: spacing.lg }]}>Max distance (km)</Text>
+          <TextInput
+            style={ui.input}
+            value={maxKm}
+            onChangeText={setMaxKm}
+            keyboardType="decimal-pad"
+            placeholder="No limit"
+            placeholderTextColor={colors.textFaint}
+          />
+          <Text style={styles.fieldHelp}>Optional. Customers further away can't book you for home visits.</Text>
 
-        <Text style={styles.note}>
-          Distances are measured in a straight line from where you work, which is usually a little shorter than the drive.
-        </Text>
+          {pricingValid && (
+            <View style={styles.preview}>
+              <Text style={styles.previewTitle}>With your prices</Text>
+              {PREVIEW_DISTANCES.map((km) => {
+                const outOfRange = max !== null && !isNaN(max) && km > max;
+                const total = fee + rate * Math.max(0, km - included);
+                return (
+                  <Text key={km} style={styles.previewLine}>
+                    A customer {km} km away {outOfRange ? "can't book a home visit" : `would pay ${formatPrice(total)}`}
+                  </Text>
+                );
+              })}
+            </View>
+          )}
 
-        {error && <Text style={styles.error}>{error}</Text>}
+          <Text style={styles.note}>
+            Distances are measured in a straight line from where you work, which is usually a little shorter than the drive.
+          </Text>
+        </View>
 
-        <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Save</Text>}
+        {error && <Text style={ui.error}>{error}</Text>}
+
+        <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleSave} disabled={saving}>
+          {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Save</Text>}
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -191,16 +263,19 @@ export default function HomeVisits() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 32 },
-  label: { fontSize: 16, fontWeight: '600', color: '#000000', marginTop: 20 },
-  help: { fontSize: 14, color: '#666666', marginTop: 4, marginBottom: 8 },
-  areaText: { fontSize: 14, color: '#1b7a3d', fontWeight: '600', marginTop: 8 },
-  input: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, padding: 12, fontSize: 16, color: '#000000', marginTop: 4 },
-  note: { fontSize: 13, color: '#666666', marginTop: 20 },
-  error: { color: '#c62828', marginTop: 16 },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 32 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  cardTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
+  cardHelp: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginBottom: spacing.md },
+  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
+  areaText: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
+  row: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  fieldLabel: { fontFamily: fonts.medium, fontSize: 13, color: colors.text, marginTop: spacing.md, marginBottom: 6 },
+  fieldHelp: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
+  switchLabel: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
+  preview: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.lg },
+  previewTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.accentDark, marginBottom: 4 },
+  previewLine: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, marginTop: 2 },
+  note: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: spacing.md },
 });

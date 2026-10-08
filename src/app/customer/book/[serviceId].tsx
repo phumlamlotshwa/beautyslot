@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Toggle } from '../../../components/toggle';
 import { AddressInput } from '../../../components/address-input';
 import { MonthCalendar } from '../../../components/month-calendar';
 import { formatDuration, formatPrice, OfferedAt } from '../../../lib/format';
@@ -382,11 +383,7 @@ export default function BookService() {
             {addressIsNew && (
               <View style={styles.saveRow}>
                 <Text style={styles.saveText}>Save as my home address</Text>
-                <Switch
-                  value={saveAddress}
-                  onValueChange={setSaveAddress}
-                  trackColor={{ true: colors.accentDark, false: colors.border }}
-                />
+                <Toggle value={saveAddress} onValueChange={setSaveAddress} />
               </View>
             )}
 

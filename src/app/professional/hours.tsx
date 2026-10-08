@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Toggle } from '../../components/toggle';
 import { SelectField, SelectOption } from '../../components/select-field';
 import { supabase } from '../../lib/supabase';
 import { colors, fonts, radius, spacing } from '../../lib/theme';
@@ -151,11 +152,7 @@ export default function WorkingHours() {
               <Text style={[styles.dayLabel, !d.open && styles.dayLabelClosed]}>{d.label}</Text>
               <View style={styles.switchRow}>
                 <Text style={[styles.status, d.open && styles.statusOpen]}>{d.open ? 'Open' : 'Closed'}</Text>
-                <Switch
-                  value={d.open}
-                  onValueChange={(value) => updateDay(d.day, { open: value })}
-                  trackColor={{ true: colors.accentDark, false: colors.border }}
-                />
+                <Toggle value={d.open} onValueChange={(value) => updateDay(d.day, { open: value })} />
               </View>
             </View>
 
