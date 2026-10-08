@@ -1,6 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getPlace, Place, searchAddresses, Suggestion } from '../lib/maps';
+import { colors, fonts, radius, spacing } from '../lib/theme';
+import { ui } from '../lib/ui';
 
 type Props = {
   value: Place | null;
@@ -73,24 +76,31 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
   return (
     <View>
       <View style={styles.inputRow}>
+        <Ionicons name="search" size={18} color={colors.textFaint} style={styles.searchIcon} />
         <TextInput
-          style={styles.input}
+          style={[ui.input, styles.input]}
           value={query}
           onChangeText={handleChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#999999"
+          placeholderTextColor={colors.textFaint}
           autoCorrect={false}
         />
-        {(searching || choosing) && <ActivityIndicator style={styles.spinner} color="#000000" />}
+        {(searching || choosing) && <ActivityIndicator style={styles.spinner} color={colors.accentDark} />}
       </View>
 
-      {value && <Text style={styles.confirmed}>✓ Address confirmed</Text>}
-      {error && <Text style={styles.error}>{error}</Text>}
+      {value && (
+        <View style={styles.confirmedRow}>
+          <Ionicons name="checkmark-circle" size={16} color={colors.accentDark} />
+          <Text style={styles.confirmed}>Address confirmed</Text>
+        </View>
+      )}
+      {error && <Text style={ui.error}>{error}</Text>}
 
       {suggestions.length > 0 && (
         <View style={styles.list}>
           {suggestions.map((s) => (
             <Pressable key={s.placeId} style={styles.option} onPress={() => handleSelect(s)}>
+              <Ionicons name="location-outline" size={18} color={colors.textMuted} />
               <Text style={styles.optionText}>{s.text}</Text>
             </Pressable>
           ))}
@@ -103,12 +113,13 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
 
 const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center' },
-  input: { flex: 1, borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, padding: 12, fontSize: 16, color: '#000000' },
+  searchIcon: { position: 'absolute', left: 12, zIndex: 1 },
+  input: { flex: 1, paddingLeft: 38, paddingRight: 40 },
   spinner: { position: 'absolute', right: 12 },
-  confirmed: { color: '#1b7a3d', fontSize: 14, marginTop: 6 },
-  error: { color: '#c62828', fontSize: 14, marginTop: 6 },
-  list: { borderWidth: 1, borderColor: '#eeeeee', borderRadius: 8, marginTop: 4, overflow: 'hidden' },
-  option: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  optionText: { fontSize: 15, color: '#000000' },
-  attribution: { fontSize: 11, color: '#999999', textAlign: 'right', padding: 6 },
+  confirmedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
+  confirmed: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
+  list: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, marginTop: spacing.xs, overflow: 'hidden' },
+  option: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 12, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  optionText: { flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.text },
+  attribution: { fontFamily: fonts.regular, fontSize: 11, color: colors.textFaint, textAlign: 'right', padding: 6 },
 });

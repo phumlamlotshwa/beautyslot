@@ -1,9 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getOrCreateConversation } from '../../../lib/chat';
 import { formatDuration, formatPrice, OfferedAt, offeredAtLabels, professionLabels } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
+import { colors, fonts, radius, spacing } from '../../../lib/theme';
+import { ui } from '../../../lib/ui';
 
 type Service = {
   id: number;
@@ -35,7 +38,6 @@ export default function ProfessionalProfile() {
       const { data, error: loadError } = await supabase
         .from('professionals')
         .select('id, first_name, last_name, profession, location, services(id, name, category, offered_at, price, duration_minutes)')
-        
         .eq('id', id)
         .single();
 
@@ -43,7 +45,7 @@ export default function ProfessionalProfile() {
         setError(loadError?.message ?? 'Professional not found.');
       } else {
         data.services.sort((a: Service, b: Service) => a.price - b.price);
-        setProfessional(data);
+        setProfessional(data as Professional);
       }
 
       setLoading(false);
@@ -70,26 +72,26 @@ export default function ProfessionalProfile() {
 
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   if (!professional) {
     return (
-      <View style={[styles.screen, styles.content]}>
-        <Text style={styles.error}>{error}</Text>
+      <View style={[ui.screen, ui.content]}>
+        <Text style={ui.error}>{error}</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={ui.screen}>
       <FlatList
         data={professional.services}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={ui.content}
         ListHeaderComponent={
           <View style={styles.header}>
             <View style={styles.avatar}>
@@ -98,24 +100,32 @@ export default function ProfessionalProfile() {
             <Text style={styles.name}>
               {professional.first_name} {professional.last_name}
             </Text>
-            <Text style={styles.details}>
+            <Text style={styles.profession}>
               {professionLabels[professional.profession] ?? professional.profession}
-              {professional.location ? ` · ${professional.location}` : ''}
             </Text>
+            {professional.location && (
+              <View style={styles.areaRow}>
+                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.area}>{professional.location}</Text>
+              </View>
+            )}
 
             <Pressable
-              style={[styles.messageButton, openingChat && styles.buttonDisabled]}
+              style={[styles.messageButton, openingChat && ui.buttonDisabled]}
               onPress={handleMessage}
               disabled={openingChat}
             >
               {openingChat ? (
-                <ActivityIndicator color="#000000" />
+                <ActivityIndicator color={colors.accentDark} />
               ) : (
-                <Text style={styles.messageButtonText}>Message</Text>
+                <>
+                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.accentDark} />
+                  <Text style={styles.messageText}>Message</Text>
+                </>
               )}
             </Pressable>
 
-            {error && <Text style={styles.error}>{error}</Text>}
+            {error && <Text style={ui.error}>{error}</Text>}
 
             <Text style={styles.sectionTitle}>Services</Text>
           </View>
@@ -128,11 +138,17 @@ export default function ProfessionalProfile() {
                 <Text style={styles.serviceDetails}>
                   {item.category} · {formatDuration(item.duration_minutes)}
                 </Text>
-                                {item.offered_at !== 'at_professional' && (
-                  <Text style={styles.homeLabel}>{offeredAtLabels[item.offered_at]}</Text>
+                {item.offered_at !== 'at_professional' && (
+                  <View style={styles.homeTag}>
+                    <Ionicons name="home-outline" size={12} color={colors.accentDark} />
+                    <Text style={styles.homeTagText}>{offeredAtLabels[item.offered_at]}</Text>
+                  </View>
                 )}
               </View>
-              <Text style={styles.price}>{formatPrice(item.price)}</Text>
+              <View style={styles.priceColumn}>
+                <Text style={styles.price}>{formatPrice(item.price)}</Text>
+                <Text style={styles.bookText}>Book ›</Text>
+              </View>
             </Pressable>
           </Link>
         )}
@@ -142,21 +158,35 @@ export default function ProfessionalProfile() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  error: { color: '#c62828', fontSize: 15, marginTop: 12 },
-  header: { alignItems: 'center', marginBottom: 8 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#ffffff', fontSize: 32, fontWeight: '700' },
-  name: { fontSize: 24, fontWeight: '700', color: '#000000', marginTop: 12 },
-  details: { fontSize: 15, color: '#666666', marginTop: 4 },
-  messageButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 32, marginTop: 16, minWidth: 140, alignItems: 'center' },
-  messageButtonText: { color: '#000000', fontSize: 15, fontWeight: '600' },
-  buttonDisabled: { opacity: 0.6 },
-  sectionTitle: { alignSelf: 'flex-start', fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 32, marginBottom: 12 },
-  card: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16, marginBottom: 12 },
-  serviceName: { fontSize: 16, fontWeight: '600', color: '#000000' },
-  serviceDetails: { fontSize: 14, color: '#666666', marginTop: 4 },
-  price: { fontSize: 15, fontWeight: '600', color: '#000000', marginLeft: 12 },
-    homeLabel: { fontSize: 13, color: '#1b7a3d', fontWeight: '600', marginTop: 4 },
+  header: { alignItems: 'center', marginBottom: spacing.sm },
+  avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: fonts.bold, fontSize: 36, color: colors.accentDark },
+  name: { fontFamily: fonts.bold, fontSize: 24, color: colors.text, marginTop: spacing.md },
+  profession: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark, marginTop: 2 },
+  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
+  area: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accentDark,
+    borderRadius: radius.pill,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    minWidth: 150,
+  },
+  messageText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
+  sectionTitle: { alignSelf: 'flex-start', fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.xxl, marginBottom: spacing.md },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  serviceName: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  serviceDetails: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 2 },
+  homeTag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: colors.accentSoft, borderRadius: radius.pill, paddingVertical: 3, paddingHorizontal: 8, marginTop: spacing.sm },
+  homeTagText: { fontFamily: fonts.medium, fontSize: 12, color: colors.accentDark },
+  priceColumn: { alignItems: 'flex-end', marginLeft: spacing.md },
+  price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  bookText: { fontFamily: fonts.medium, fontSize: 13, color: colors.accentDark, marginTop: 4 },
 });
