@@ -1,6 +1,7 @@
-import { Link, useLocalSearchParams } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { getOrCreateConversation } from '../../../lib/chat';
 import { formatDuration, formatPrice, professionLabels } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
 
@@ -25,6 +26,7 @@ export default function ProfessionalProfile() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [professional, setProfessional] = useState<Professional | null>(null);
   const [loading, setLoading] = useState(true);
+  const [openingChat, setOpeningChat] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +50,22 @@ export default function ProfessionalProfile() {
     loadProfile();
   }, [id]);
 
+  async function handleMessage() {
+    if (!professional) return;
+
+    setError(null);
+    setOpeningChat(true);
+
+    try {
+      const conversationId = await getOrCreateConversation(professional.id);
+      router.push({ pathname: '/chat/[conversationId]', params: { conversationId: String(conversationId) } });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open the chat. Please try again.');
+    } finally {
+      setOpeningChat(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={[styles.screen, { justifyContent: 'center' }]}>
@@ -56,7 +74,7 @@ export default function ProfessionalProfile() {
     );
   }
 
-  if (error || !professional) {
+  if (!professional) {
     return (
       <View style={[styles.screen, styles.content]}>
         <Text style={styles.error}>{error}</Text>
@@ -82,6 +100,21 @@ export default function ProfessionalProfile() {
               {professionLabels[professional.profession] ?? professional.profession}
               {professional.location ? ` · ${professional.location}` : ''}
             </Text>
+
+            <Pressable
+              style={[styles.messageButton, openingChat && styles.buttonDisabled]}
+              onPress={handleMessage}
+              disabled={openingChat}
+            >
+              {openingChat ? (
+                <ActivityIndicator color="#000000" />
+              ) : (
+                <Text style={styles.messageButtonText}>Message</Text>
+              )}
+            </Pressable>
+
+            {error && <Text style={styles.error}>{error}</Text>}
+
             <Text style={styles.sectionTitle}>Services</Text>
           </View>
         }
@@ -106,15 +139,18 @@ export default function ProfessionalProfile() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#ffffff' },
   content: { padding: 24, paddingBottom: 48 },
-  error: { color: '#c62828', fontSize: 16 },
+  error: { color: '#c62828', fontSize: 15, marginTop: 12 },
   header: { alignItems: 'center', marginBottom: 8 },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#ffffff', fontSize: 32, fontWeight: '700' },
   name: { fontSize: 24, fontWeight: '700', color: '#000000', marginTop: 12 },
   details: { fontSize: 15, color: '#666666', marginTop: 4 },
+  messageButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 32, marginTop: 16, minWidth: 140, alignItems: 'center' },
+  messageButtonText: { color: '#000000', fontSize: 15, fontWeight: '600' },
+  buttonDisabled: { opacity: 0.6 },
   sectionTitle: { alignSelf: 'flex-start', fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 32, marginBottom: 12 },
   card: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16, marginBottom: 12 },
   serviceName: { fontSize: 16, fontWeight: '600', color: '#000000' },
   serviceDetails: { fontSize: 14, color: '#666666', marginTop: 4 },
-  price: { fontSize: 16, fontWeight: '600', color: '#000000', marginLeft: 12 },
+  price: { fontSize: 15, fontWeight: '600', color: '#000000', marginLeft: 12 },
 });
