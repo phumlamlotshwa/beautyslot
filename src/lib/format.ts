@@ -16,3 +16,16 @@ export function formatDuration(minutes: number) {
 export function formatPrice(price: number) {
   return `R${Number(price).toFixed(2)}`;
 }
+export type OfferedAt = 'at_professional' | 'at_customer' | 'both';
+
+export const offeredAtOptions: { value: OfferedAt; label: string }[] = [
+  { value: 'at_professional', label: 'At my place' },
+  { value: 'at_customer', label: "At the customer's home" },
+  { value: 'both', label: 'Both' },
+];
+
+export const offeredAtLabels: Record<OfferedAt, string> = {
+  at_professional: 'At their place',
+  at_customer: 'Home service only',
+  both: 'Home service available',
+};

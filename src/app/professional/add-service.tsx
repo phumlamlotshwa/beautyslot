@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { OfferedAt, offeredAtOptions } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
 const categories = ['Hair', 'Braids', 'Barbering', 'Nails', 'Makeup'];
@@ -8,6 +9,7 @@ const categories = ['Hair', 'Braids', 'Barbering', 'Nails', 'Makeup'];
 export default function AddService() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [offeredAt, setOfferedAt] = useState<OfferedAt>('at_professional');
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,7 @@ export default function AddService() {
       professional_id: user.id,
       name: name.trim(),
       category,
+      offered_at: offeredAt,
       price: priceNumber,
       duration_minutes: durationNumber,
     });
@@ -83,6 +86,24 @@ export default function AddService() {
           ))}
         </View>
 
+        <Text style={styles.label}>Where do you offer it?</Text>
+        <View style={styles.wrap}>
+          {offeredAtOptions.map((o) => (
+            <Pressable
+              key={o.value}
+              style={[styles.choice, offeredAt === o.value && styles.choiceSelected]}
+              onPress={() => setOfferedAt(o.value)}
+            >
+              <Text style={[styles.choiceText, offeredAt === o.value && styles.choiceTextSelected]}>{o.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {offeredAt !== 'at_professional' && (
+          <Text style={styles.help}>
+            Make sure your address and call-out fee are set under Home visits.
+          </Text>
+        )}
+
         <Text style={styles.label}>Price (R)</Text>
         <TextInput style={styles.input} value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="e.g. 250" placeholderTextColor="#999999" />
 
@@ -103,6 +124,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#ffffff' },
   content: { padding: 24, paddingBottom: 48 },
   label: { fontSize: 14, color: '#333333', marginTop: 16, marginBottom: 6 },
+  help: { fontSize: 13, color: '#666666', marginTop: 8 },
   input: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, padding: 12, fontSize: 16, color: '#000000' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choice: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
