@@ -1,6 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { ConfirmHomeVisit } from '../../components/confirm-home-visit';
 import { formatPrice } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
@@ -10,6 +11,12 @@ type Booking = {
   id: number;
   starts_at: string;
   status: Status;
+  location_type: 'at_professional' | 'at_customer';
+  address: string | null;
+  address_lat: number | null;
+  address_lng: number | null;
+  call_out_fee: number;
+  travel_minutes: number;
   services: { name: string; price: number } | null;
   customers: { first_name: string; last_name: string } | null;
 };
@@ -34,6 +41,7 @@ export default function ProfessionalBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadBookings = useCallback(async () => {
@@ -48,7 +56,9 @@ export default function ProfessionalBookings() {
 
     const { data, error: loadError } = await supabase
       .from('bookings')
-      .select('id, starts_at, status, services(name, price), customers(first_name, last_name)')
+      .select(
+        'id, starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, services(name, price), customers(first_name, last_name)'
+      )
       .eq('professional_id', user.id)
       .order('starts_at', { ascending: true });
 
@@ -84,6 +94,33 @@ export default function ProfessionalBookings() {
     }
 
     loadBookings();
+  }
+
+  async function confirmHomeVisit(travelMinutes: number) {
+    if (!homeVisit) return;
+
+    const { error: updateError } = await supabase
+      .from('bookings')
+      .update({ status: 'confirmed', travel_minutes: travelMinutes })
+      .eq('id', homeVisit.id);
+
+    if (updateError) {
+      if (updateError.code === '23P01') {
+        throw new Error('With that travel buffer, this visit overlaps another booking. Try a shorter buffer, or decline.');
+      }
+      throw new Error(updateError.message);
+    }
+
+    setHomeVisit(null);
+    loadBookings();
+  }
+
+  function handleConfirm(booking: Booking) {
+    if (booking.location_type === 'at_customer') {
+      setHomeVisit(booking);
+    } else {
+      updateStatus(booking, 'confirmed');
+    }
   }
 
   function confirmCancel(booking: Booking, title: string) {
@@ -131,7 +168,9 @@ export default function ProfessionalBookings() {
         renderItem={({ item, section }) => {
           const status = statusStyles[item.status];
           const busy = updatingId === item.id;
+          const isHome = item.location_type === 'at_customer';
           const canComplete = section.title === 'Past and cancelled' && item.status === 'confirmed';
+          const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
 
           return (
             <View style={styles.card}>
@@ -145,13 +184,27 @@ export default function ProfessionalBookings() {
                 {item.customers?.first_name} {item.customers?.last_name}
               </Text>
               <Text style={styles.details}>{formatBookingTime(item.starts_at)}</Text>
-              {item.services && <Text style={styles.price}>{formatPrice(item.services.price)}</Text>}
+
+              {isHome && (
+                <View style={styles.homeBox}>
+                  <Text style={styles.homeTitle}>Home visit</Text>
+                  <Text style={styles.homeAddress}>{item.address}</Text>
+                  {item.travel_minutes > 0 && (
+                    <Text style={styles.homeDetail}>Travel buffer: {item.travel_minutes} min each way</Text>
+                  )}
+                </View>
+              )}
+
+              <Text style={styles.price}>
+                {formatPrice(total)}
+                {isHome && Number(item.call_out_fee) > 0 ? ` (incl. ${formatPrice(item.call_out_fee)} call-out)` : ''}
+              </Text>
 
               {busy && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
 
               {!busy && section.title === 'Waiting for you' && (
                 <View style={styles.actions}>
-                  <Pressable style={[styles.actionButton, styles.primary]} onPress={() => updateStatus(item, 'confirmed')}>
+                  <Pressable style={[styles.actionButton, styles.primary]} onPress={() => handleConfirm(item)}>
                     <Text style={styles.primaryText}>Confirm</Text>
                   </Pressable>
                   <Pressable style={[styles.actionButton, styles.danger]} onPress={() => confirmCancel(item, 'Decline')}>
@@ -175,6 +228,16 @@ export default function ProfessionalBookings() {
           );
         }}
       />
+
+      {homeVisit && homeVisit.address_lat !== null && homeVisit.address_lng !== null && (
+        <ConfirmHomeVisit
+          visible
+          address={homeVisit.address ?? ''}
+          destination={{ lat: homeVisit.address_lat, lng: homeVisit.address_lng }}
+          onCancel={() => setHomeVisit(null)}
+          onConfirm={confirmHomeVisit}
+        />
+      )}
     </View>
   );
 }
@@ -191,7 +254,11 @@ const styles = StyleSheet.create({
   badge: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 },
   badgeText: { fontSize: 12, fontWeight: '600' },
   details: { fontSize: 14, color: '#666666', marginTop: 4 },
-  price: { fontSize: 15, fontWeight: '600', color: '#000000', marginTop: 8 },
+  homeBox: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, marginTop: 10 },
+  homeTitle: { fontSize: 13, fontWeight: '700', color: '#000000' },
+  homeAddress: { fontSize: 14, color: '#333333', marginTop: 4 },
+  homeDetail: { fontSize: 13, color: '#666666', marginTop: 4 },
+  price: { fontSize: 15, fontWeight: '600', color: '#000000', marginTop: 10 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionButton: { flex: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1 },
   primary: { backgroundColor: '#000000', borderColor: '#000000' },
