@@ -1,8 +1,10 @@
 import { Link, router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LocationBar } from '../../components/location-bar';
 import { MessagesButton } from '../../components/messages-button';
 import { professionLabels } from '../../lib/format';
+import { CustomerLocation, distanceKm, formatDistance, getStartingLocation } from '../../lib/location';
 import { supabase } from '../../lib/supabase';
 
 type Professional = {
@@ -11,6 +13,8 @@ type Professional = {
   last_name: string;
   profession: string;
   location: string | null;
+  approx_lat: number | null;
+  approx_lng: number | null;
 };
 
 const filters = [
@@ -21,11 +25,27 @@ const filters = [
   { value: 'nail_artist', label: 'Nail artist' },
 ];
 
+const distances: { value: number | null; label: string }[] = [
+  { value: 5, label: '5 km' },
+  { value: 10, label: '10 km' },
+  { value: 25, label: '25 km' },
+  { value: 50, label: '50 km' },
+  { value: null, label: 'Any distance' },
+];
+
 export default function CustomerHome() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [filter, setFilter] = useState('all');
+  const [customerLocation, setCustomerLocation] = useState<CustomerLocation | null>(null);
+  const [maxDistance, setMaxDistance] = useState<number | null>(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getStartingLocation().then((location) => {
+      if (location) setCustomerLocation(location);
+    });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -34,13 +54,13 @@ export default function CustomerHome() {
 
         const { data, error: loadError } = await supabase
           .from('professionals')
-          .select('id, first_name, last_name, profession, location, services!inner(id)')
+          .select('id, first_name, last_name, profession, location, approx_lat, approx_lng, services!inner(id)')
           .order('first_name', { ascending: true });
 
         if (loadError) {
           setError(loadError.message);
         } else {
-          setProfessionals(data ?? []);
+          setProfessionals((data ?? []) as unknown as Professional[]);
         }
 
         setLoading(false);
@@ -50,12 +70,34 @@ export default function CustomerHome() {
     }, [])
   );
 
-  const shownProfessionals =
-    filter === 'all' ? professionals : professionals.filter((p) => p.profession === filter);
+  const withDistance = professionals.map((p) => ({
+    ...p,
+    km:
+      customerLocation && p.approx_lat !== null && p.approx_lng !== null
+        ? distanceKm(customerLocation, { lat: p.approx_lat, lng: p.approx_lng })
+        : null,
+  }));
+
+  const shownProfessionals = withDistance
+    .filter((p) => filter === 'all' || p.profession === filter)
+    .filter((p) => !customerLocation || maxDistance === null || (p.km !== null && p.km <= maxDistance))
+    .sort((a, b) => {
+      if (a.km === null && b.km === null) return 0;
+      if (a.km === null) return 1;
+      if (b.km === null) return -1;
+      return a.km - b.km;
+    });
 
   async function handleLogOut() {
     await supabase.auth.signOut();
     router.replace('/');
+  }
+
+  let emptyMessage = 'No professionals yet. Check back soon.';
+  if (customerLocation && maxDistance !== null) {
+    emptyMessage = `No professionals within ${maxDistance} km yet. Try a bigger distance.`;
+  } else if (filter !== 'all') {
+    emptyMessage = `No ${professionLabels[filter].toLowerCase()}s yet. Check back soon.`;
   }
 
   return (
@@ -68,11 +110,13 @@ export default function CustomerHome() {
           <>
             <Text style={styles.title}>Find a professional</Text>
             <Link href="/customer/bookings" asChild>
-            <Pressable style={styles.outlineButton}>
-            <Text style={styles.outlineButtonText}>My bookings</Text>
+              <Pressable style={styles.outlineButton}>
+                <Text style={styles.outlineButtonText}>My bookings</Text>
               </Pressable>
             </Link>
             <MessagesButton />
+
+            <LocationBar value={customerLocation} onChange={setCustomerLocation} />
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
               {filters.map((f) => (
@@ -85,6 +129,21 @@ export default function CustomerHome() {
                 </Pressable>
               ))}
             </ScrollView>
+
+            {customerLocation && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+                {distances.map((d) => (
+                  <Pressable
+                    key={d.label}
+                    style={[styles.chip, maxDistance === d.value && styles.chipSelected]}
+                    onPress={() => setMaxDistance(d.value)}
+                  >
+                    <Text style={[styles.chipText, maxDistance === d.value && styles.chipTextSelected]}>{d.label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
             {error && <Text style={styles.error}>{error}</Text>}
           </>
         }
@@ -92,11 +151,7 @@ export default function CustomerHome() {
           loading ? (
             <ActivityIndicator style={{ marginTop: 32 }} color="#000000" />
           ) : (
-            <Text style={styles.empty}>
-              {filter === 'all'
-                ? 'No professionals yet. Check back soon.'
-                : `No ${professionLabels[filter].toLowerCase()}s yet. Check back soon.`}
-            </Text>
+            <Text style={styles.empty}>{emptyMessage}</Text>
           )
         }
         renderItem={({ item }) => (
@@ -113,6 +168,7 @@ export default function CustomerHome() {
                   {professionLabels[item.profession] ?? item.profession}
                   {item.location ? ` · ${item.location}` : ''}
                 </Text>
+                {item.km !== null && <Text style={styles.distance}>{formatDistance(item.km)}</Text>}
               </View>
             </Pressable>
           </Link>
@@ -120,7 +176,6 @@ export default function CustomerHome() {
         ListFooterComponent={
           <Pressable style={styles.secondaryButton} onPress={handleLogOut}>
             <Text style={styles.secondaryButtonText}>Log out</Text>
-            
           </Pressable>
         }
       />
@@ -132,7 +187,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#ffffff' },
   content: { padding: 24, paddingBottom: 48 },
   title: { fontSize: 26, fontWeight: '700', color: '#000000', marginBottom: 16 },
-  filters: { gap: 8, paddingBottom: 20 },
+  outlineButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 12 },
+  outlineButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
+  filters: { gap: 8, paddingBottom: 16 },
   chip: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
   chipSelected: { backgroundColor: '#000000', borderColor: '#000000' },
   chipText: { color: '#000000' },
@@ -144,8 +201,7 @@ const styles = StyleSheet.create({
   avatarText: { color: '#ffffff', fontSize: 20, fontWeight: '700' },
   name: { fontSize: 16, fontWeight: '600', color: '#000000' },
   details: { fontSize: 14, color: '#666666', marginTop: 4 },
+  distance: { fontSize: 13, color: '#1b7a3d', fontWeight: '600', marginTop: 4 },
   secondaryButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 24 },
   secondaryButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
-    outlineButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 16 },
-  outlineButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
 });
