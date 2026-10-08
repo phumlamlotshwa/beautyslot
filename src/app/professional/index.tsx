@@ -1,6 +1,7 @@
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { formatDuration, formatPrice } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
 type Service = {
@@ -10,14 +11,6 @@ type Service = {
   price: number;
   duration_minutes: number;
 };
-
-function formatDuration(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours === 0) return `${mins} min`;
-  if (mins === 0) return `${hours}h`;
-  return `${hours}h ${mins}min`;
-}
 
 export default function ProfessionalHome() {
   const [services, setServices] = useState<Service[]>([]);
@@ -69,6 +62,11 @@ export default function ProfessionalHome() {
         ListHeaderComponent={
           <>
             <Text style={styles.title}>My services</Text>
+            <Link href="/professional/hours" asChild>
+              <Pressable style={styles.outlineButton}>
+                <Text style={styles.secondaryButtonText}>Set working hours</Text>
+              </Pressable>
+            </Link>
             <Link href="/professional/add-service" asChild>
               <Pressable style={styles.button}>
                 <Text style={styles.buttonText}>Add a service</Text>
@@ -84,7 +82,7 @@ export default function ProfessionalHome() {
             <Text style={styles.empty}>You haven't added any services yet.</Text>
           )
         }
-                renderItem={({ item }) => (
+        renderItem={({ item }) => (
           <Link href={{ pathname: '/professional/service/[id]', params: { id: String(item.id) } }} asChild>
             <Pressable style={styles.card}>
               <View style={{ flex: 1 }}>
@@ -93,7 +91,7 @@ export default function ProfessionalHome() {
                   {item.category} · {formatDuration(item.duration_minutes)}
                 </Text>
               </View>
-              <Text style={styles.price}>R{Number(item.price).toFixed(2)}</Text>
+              <Text style={styles.price}>{formatPrice(item.price)}</Text>
             </Pressable>
           </Link>
         )}
@@ -111,6 +109,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#ffffff' },
   content: { padding: 24, paddingBottom: 48 },
   title: { fontSize: 26, fontWeight: '700', color: '#000000', marginBottom: 16 },
+  outlineButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 12 },
   button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 24 },
   buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   error: { color: '#c62828', marginBottom: 16 },
