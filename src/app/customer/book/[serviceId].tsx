@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -7,6 +8,8 @@ import { formatDuration, formatPrice, OfferedAt } from '../../../lib/format';
 import { Place } from '../../../lib/maps';
 import { BusyTime, getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
+import { colors, fonts, radius, spacing } from '../../../lib/theme';
+import { ui } from '../../../lib/ui';
 
 type Service = {
   id: number;
@@ -320,49 +323,53 @@ export default function BookService() {
 
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   if (!service) {
     return (
-      <View style={[styles.screen, styles.content]}>
-        <Text style={styles.error}>{error}</Text>
+      <View style={[ui.screen, ui.content]}>
+        <Text style={ui.error}>{error}</Text>
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      style={styles.screen}
+      style={ui.screen}
       behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <View style={styles.serviceCard}>
           <Text style={styles.serviceName}>{service.name}</Text>
-          <Text style={styles.serviceDetails}>
-            {formatDuration(service.duration_minutes)} · {formatPrice(service.price)}
-          </Text>
+          <View style={styles.serviceMeta}>
+            <Ionicons name="time-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.serviceMetaText}>{formatDuration(service.duration_minutes)}</Text>
+            <Text style={styles.servicePrice}>{formatPrice(service.price)}</Text>
+          </View>
         </View>
 
         {service.offered_at === 'both' && (
           <>
-            <Text style={styles.sectionTitle}>Where?</Text>
+            <Text style={ui.sectionTitle}>Where?</Text>
             <View style={styles.row}>
               <Pressable
-                style={[styles.choice, !isHome && styles.chipSelected]}
+                style={[styles.placeCard, !isHome && styles.placeCardSelected]}
                 onPress={() => setLocationType('at_professional')}
               >
-                <Text style={[styles.choiceText, !isHome && styles.textSelected]}>At their place</Text>
+                <Ionicons name="storefront-outline" size={22} color={!isHome ? colors.accentDark : colors.textMuted} />
+                <Text style={[styles.placeText, !isHome && styles.placeTextSelected]}>At their place</Text>
               </Pressable>
               <Pressable
-                style={[styles.choice, isHome && styles.chipSelected]}
+                style={[styles.placeCard, isHome && styles.placeCardSelected]}
                 onPress={() => setLocationType('at_customer')}
               >
-                <Text style={[styles.choiceText, isHome && styles.textSelected]}>At my home</Text>
+                <Ionicons name="home-outline" size={22} color={isHome ? colors.accentDark : colors.textMuted} />
+                <Text style={[styles.placeText, isHome && styles.placeTextSelected]}>At my home</Text>
               </Pressable>
             </View>
           </>
@@ -370,7 +377,7 @@ export default function BookService() {
 
         {isHome && (
           <>
-            <Text style={styles.sectionTitle}>Your address</Text>
+            <Text style={ui.sectionTitle}>Your address</Text>
             <AddressInput value={address} onChange={setAddress} />
             {addressIsNew && (
               <View style={styles.saveRow}>
@@ -378,30 +385,33 @@ export default function BookService() {
                 <Switch
                   value={saveAddress}
                   onValueChange={setSaveAddress}
-                  trackColor={{ true: '#000000', false: '#cccccc' }}
+                  trackColor={{ true: colors.accentDark, false: colors.border }}
                 />
               </View>
             )}
 
-            {quoting && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
+            {quoting && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
             {!quoting && quote && quote.in_range && (
-              <Text style={styles.quote}>
-                Call-out fee for your address: {formatPrice(quote.fee)} (about {quote.km} km)
-              </Text>
+              <View style={styles.quoteBox}>
+                <Ionicons name="car-outline" size={18} color={colors.accentDark} />
+                <Text style={styles.quoteText}>
+                  Call-out fee: {formatPrice(quote.fee)} · about {quote.km} km
+                </Text>
+              </View>
             )}
             {!quoting && quote && !quote.in_range && (
-              <Text style={styles.error}>
+              <Text style={ui.error}>
                 Your address is about {quote.km} km away, outside the area this professional travels to.
               </Text>
             )}
-            {!quoting && quoteError && <Text style={styles.error}>{quoteError}</Text>}
+            {!quoting && quoteError && <Text style={ui.error}>{quoteError}</Text>}
           </>
         )}
 
-        <Text style={styles.sectionTitle}>Choose a date</Text>
+        <Text style={ui.sectionTitle}>Choose a date</Text>
 
         {hours.length === 0 ? (
-          <Text style={styles.message}>This professional hasn't set their working hours yet.</Text>
+          <Text style={ui.muted}>This professional hasn't set their working hours yet.</Text>
         ) : (
           <>
             <MonthCalendar
@@ -412,21 +422,17 @@ export default function BookService() {
               onSelectDate={selectDate}
               onChangeMonth={changeMonth}
             />
-            {loadingMonth ? (
-              <ActivityIndicator style={{ marginTop: 8 }} color="#000000" />
-            ) : (
-              <Text style={styles.hint}>Grey dates are unavailable or fully booked.</Text>
-            )}
+            {loadingMonth && <ActivityIndicator style={{ marginTop: spacing.sm }} color={colors.accentDark} />}
           </>
         )}
 
         {selectedDate && (
           <>
-            <Text style={styles.sectionTitle}>
+            <Text style={ui.sectionTitle}>
               Times on {dayNames[selectedDate.getDay()]} {selectedDate.getDate()} {monthNames[selectedDate.getMonth()]}
             </Text>
             {slots.length === 0 ? (
-              <Text style={styles.message}>No open times on this day. Try another date.</Text>
+              <Text style={ui.muted}>No open times on this day. Try another date.</Text>
             ) : (
               <View style={styles.slotGrid}>
                 {slots.map((slot) => {
@@ -434,10 +440,10 @@ export default function BookService() {
                   return (
                     <Pressable
                       key={slot.getTime()}
-                      style={[styles.slotChip, isSelected && styles.chipSelected]}
+                      style={[styles.slotChip, isSelected && styles.slotChipSelected]}
                       onPress={() => setSelectedSlot(slot)}
                     >
-                      <Text style={[styles.slotText, isSelected && styles.textSelected]}>{formatTime(slot)}</Text>
+                      <Text style={[styles.slotText, isSelected && styles.slotTextSelected]}>{formatTime(slot)}</Text>
                     </Pressable>
                   );
                 })}
@@ -446,14 +452,23 @@ export default function BookService() {
           </>
         )}
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={ui.error}>{error}</Text>}
 
         {selectedSlot && (
-          <View style={styles.confirmBox}>
-            <Text style={styles.summary}>
-              {service.name} on {dayNames[selectedSlot.getDay()]} {selectedSlot.getDate()} {monthNames[selectedSlot.getMonth()]} at {formatTime(selectedSlot)}
-            </Text>
-            <Text style={styles.summaryDetail}>{isHome ? 'At your home' : 'At their place'}</Text>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>{service.name}</Text>
+            <View style={styles.summaryLine}>
+              <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.summaryText}>
+                {dayNames[selectedSlot.getDay()]} {selectedSlot.getDate()} {monthNames[selectedSlot.getMonth()]} at {formatTime(selectedSlot)}
+              </Text>
+            </View>
+            <View style={styles.summaryLine}>
+              <Ionicons name={isHome ? 'home-outline' : 'storefront-outline'} size={16} color={colors.textMuted} />
+              <Text style={styles.summaryText}>{isHome ? 'At your home' : 'At their place'}</Text>
+            </View>
+
+            <View style={styles.divider} />
 
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>Service</Text>
@@ -471,11 +486,11 @@ export default function BookService() {
             </View>
 
             <Pressable
-              style={[styles.button, (confirming || !canConfirm) && styles.buttonDisabled]}
+              style={[ui.button, (confirming || !canConfirm) && ui.buttonDisabled]}
               onPress={handleConfirm}
               disabled={confirming || !canConfirm}
             >
-              {confirming ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Confirm booking</Text>}
+              {confirming ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Confirm booking</Text>}
             </Pressable>
           </View>
         )}
@@ -485,36 +500,34 @@ export default function BookService() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  serviceCard: { borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16 },
-  serviceName: { fontSize: 18, fontWeight: '700', color: '#000000' },
-  serviceDetails: { fontSize: 14, color: '#666666', marginTop: 4 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 28, marginBottom: 12 },
-  row: { flexDirection: 'row', gap: 8 },
-  choice: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  choiceText: { color: '#000000' },
-  saveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
-  saveText: { fontSize: 15, color: '#000000' },
-  quote: { fontSize: 15, color: '#1b7a3d', fontWeight: '600', marginTop: 12 },
-  hint: { fontSize: 13, color: '#999999', textAlign: 'center', marginTop: 8 },
-  chipSelected: { backgroundColor: '#000000', borderColor: '#000000' },
-  textSelected: { color: '#ffffff' },
-  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  slotChip: { width: '30%', borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  slotText: { fontSize: 16, color: '#000000' },
-  message: { fontSize: 15, color: '#666666', marginTop: 8 },
-  confirmBox: { borderTopWidth: 1, borderTopColor: '#eeeeee', marginTop: 28, paddingTop: 20 },
-  summary: { fontSize: 16, fontWeight: '600', color: '#000000' },
-  summaryDetail: { fontSize: 14, color: '#666666', marginTop: 4, marginBottom: 12 },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  priceLabel: { fontSize: 15, color: '#666666' },
-  priceValue: { fontSize: 15, color: '#000000' },
-  totalRow: { borderTopWidth: 1, borderTopColor: '#eeeeee', marginTop: 4, paddingTop: 8 },
-  totalLabel: { fontSize: 16, fontWeight: '700', color: '#000000' },
-  totalValue: { fontSize: 16, fontWeight: '700', color: '#000000' },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 16 },
-  buttonDisabled: { opacity: 0.4 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  error: { color: '#c62828', marginTop: 12 },
+  serviceCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
+  serviceName: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
+  serviceMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  serviceMetaText: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, flex: 1 },
+  servicePrice: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  row: { flexDirection: 'row', gap: spacing.md },
+  placeCard: { flex: 1, alignItems: 'center', gap: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.lg },
+  placeCardSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accentDark },
+  placeText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
+  placeTextSelected: { color: colors.accentDark },
+  saveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
+  saveText: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
+  quoteBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  quoteText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
+  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  slotChip: { width: '31%', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
+  slotChipSelected: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
+  slotText: { fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  slotTextSelected: { color: colors.onAccent },
+  summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: 28 },
+  summaryTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginBottom: spacing.sm },
+  summaryLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
+  summaryText: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+  priceLabel: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted },
+  priceValue: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
+  totalRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.sm, paddingTop: spacing.sm },
+  totalLabel: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  totalValue: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
 });
