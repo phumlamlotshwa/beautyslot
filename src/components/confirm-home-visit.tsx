@@ -1,7 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getTravelTime, Point, TravelTime } from '../lib/maps';
 import { supabase } from '../lib/supabase';
+import { colors, fonts, radius, spacing } from '../lib/theme';
+import { ui } from '../lib/ui';
 
 type Props = {
   visible: boolean;
@@ -85,15 +88,21 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
       <Pressable style={styles.backdrop} onPress={onCancel} />
       <View style={styles.sheet}>
         <Text style={styles.title}>Confirm home visit</Text>
-        <Text style={styles.address}>{address}</Text>
+        <View style={styles.addressRow}>
+          <Ionicons name="home-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.address}>{address}</Text>
+        </View>
 
         <View style={styles.estimateBox}>
           {loading ? (
-            <ActivityIndicator color="#000000" />
+            <ActivityIndicator color={colors.accentDark} />
           ) : estimate ? (
-            <Text style={styles.estimate}>
-              About {estimate.minutes} min · {estimate.km} km from your base
-            </Text>
+            <View style={styles.estimateRow}>
+              <Ionicons name="car-outline" size={20} color={colors.accentDark} />
+              <Text style={styles.estimate}>
+                About {estimate.minutes} min · {estimate.km} km from your base
+              </Text>
+            </View>
           ) : (
             <Text style={styles.estimateMissing}>Travel time unavailable</Text>
           )}
@@ -102,29 +111,29 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
         <Text style={styles.label}>Travel buffer before and after</Text>
         <View style={styles.stepper}>
           <Pressable
-            style={styles.stepButton}
+            style={[styles.stepButton, buffer <= 0 && styles.stepButtonDisabled]}
             onPress={() => setBuffer((b) => Math.max(0, b - STEP))}
             disabled={buffer <= 0}
           >
-            <Text style={[styles.stepText, buffer <= 0 && styles.faded]}>−</Text>
+            <Ionicons name="remove" size={22} color={buffer <= 0 ? colors.border : colors.accentDark} />
           </Pressable>
           <Text style={styles.bufferValue}>{buffer} min</Text>
           <Pressable
-            style={styles.stepButton}
+            style={[styles.stepButton, buffer >= MAX_BUFFER && styles.stepButtonDisabled]}
             onPress={() => setBuffer((b) => Math.min(MAX_BUFFER, b + STEP))}
             disabled={buffer >= MAX_BUFFER}
           >
-            <Text style={[styles.stepText, buffer >= MAX_BUFFER && styles.faded]}>+</Text>
+            <Ionicons name="add" size={22} color={buffer >= MAX_BUFFER ? colors.border : colors.accentDark} />
           </Pressable>
         </View>
         <Text style={styles.help}>
-          This time is blocked before and after the appointment so nobody can book you while you travel.
+          This time is blocked before and after the appointment, so nobody can book you while you travel.
         </Text>
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={ui.error}>{error}</Text>}
 
-        <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleConfirm} disabled={saving}>
-          {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Confirm booking</Text>}
+        <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleConfirm} disabled={saving}>
+          {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Confirm booking</Text>}
         </Pressable>
         <Pressable style={styles.cancelButton} onPress={onCancel} disabled={saving}>
           <Text style={styles.cancelText}>Not now</Text>
@@ -135,24 +144,21 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)' },
-  sheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, paddingBottom: 40 },
-  title: { fontSize: 20, fontWeight: '700', color: '#000000' },
-  address: { fontSize: 15, color: '#666666', marginTop: 6 },
-  estimateBox: { backgroundColor: '#f5f5f5', borderRadius: 12, padding: 16, marginTop: 16, alignItems: 'center' },
-  estimate: { fontSize: 16, fontWeight: '600', color: '#000000' },
-  estimateMissing: { fontSize: 15, color: '#666666' },
-  label: { fontSize: 15, fontWeight: '600', color: '#000000', marginTop: 20 },
-  stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, marginTop: 12 },
-  stepButton: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: '#000000', alignItems: 'center', justifyContent: 'center' },
-  stepText: { fontSize: 24, color: '#000000' },
-  faded: { opacity: 0.2 },
-  bufferValue: { fontSize: 22, fontWeight: '700', color: '#000000', minWidth: 90, textAlign: 'center' },
-  help: { fontSize: 13, color: '#666666', marginTop: 12, textAlign: 'center' },
-  error: { color: '#c62828', marginTop: 12 },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 20 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  cancelButton: { padding: 14, alignItems: 'center', marginTop: 4 },
-  cancelText: { color: '#000000', fontSize: 15, fontWeight: '600' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)' },
+  sheet: { backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.xl, paddingBottom: 40 },
+  title: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
+  addressRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginTop: spacing.sm },
+  address: { flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted },
+  estimateBox: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg, alignItems: 'center' },
+  estimateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  estimate: { fontFamily: fonts.medium, fontSize: 16, color: colors.accentDark },
+  estimateMissing: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted },
+  label: { fontFamily: fonts.medium, fontSize: 15, color: colors.text, marginTop: spacing.xl, textAlign: 'center' },
+  stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl, marginTop: spacing.md },
+  stepButton: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: colors.accentDark, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  stepButtonDisabled: { borderColor: colors.border },
+  bufferValue: { fontFamily: fonts.bold, fontSize: 24, color: colors.text, minWidth: 100, textAlign: 'center' },
+  help: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: spacing.md, textAlign: 'center' },
+  cancelButton: { padding: 14, alignItems: 'center', marginTop: spacing.xs },
+  cancelText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
 });

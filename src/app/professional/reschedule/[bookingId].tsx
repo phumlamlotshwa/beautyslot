@@ -1,9 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MonthCalendar } from '../../../components/month-calendar';
 import { BusyTime, getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
+import { colors, fonts, radius, spacing } from '../../../lib/theme';
+import { ui } from '../../../lib/ui';
 
 type Booking = {
   id: number;
@@ -216,16 +219,16 @@ export default function SuggestNewTime() {
 
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   if (!booking) {
     return (
-      <View style={[styles.screen, styles.content]}>
-        <Text style={styles.error}>{error}</Text>
+      <View style={[ui.screen, ui.content]}>
+        <Text style={ui.error}>{error}</Text>
       </View>
     );
   }
@@ -233,16 +236,22 @@ export default function SuggestNewTime() {
   const currentTime = new Date(booking.starts_at);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView style={ui.screen} contentContainerStyle={ui.content}>
       <View style={styles.card}>
         <Text style={styles.serviceName}>{booking.services?.name}</Text>
-        <Text style={styles.details}>with {booking.customers?.first_name}</Text>
-        <Text style={styles.details}>
-          Currently {formatDay(currentTime)} at {formatTime(currentTime)}
-        </Text>
+        <View style={styles.line}>
+          <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.lineText}>{booking.customers?.first_name}</Text>
+        </View>
+        <View style={styles.line}>
+          <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.lineText}>
+            Currently {formatDay(currentTime)} at {formatTime(currentTime)}
+          </Text>
+        </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Choose a new date</Text>
+      <Text style={ui.sectionTitle}>Choose a new date</Text>
       <MonthCalendar
         month={visibleMonth}
         minMonth={thisMonth}
@@ -251,13 +260,13 @@ export default function SuggestNewTime() {
         onSelectDate={selectDate}
         onChangeMonth={changeMonth}
       />
-      {loadingMonth && <ActivityIndicator style={{ marginTop: 8 }} color="#000000" />}
+      {loadingMonth && <ActivityIndicator style={{ marginTop: spacing.sm }} color={colors.accentDark} />}
 
       {selectedDate && (
         <>
-          <Text style={styles.sectionTitle}>Times on {formatDay(selectedDate)}</Text>
+          <Text style={ui.sectionTitle}>Times on {formatDay(selectedDate)}</Text>
           {slots.length === 0 ? (
-            <Text style={styles.message}>No open times on this day.</Text>
+            <Text style={ui.muted}>No open times on this day.</Text>
           ) : (
             <View style={styles.slotGrid}>
               {slots.map((slot) => {
@@ -265,10 +274,10 @@ export default function SuggestNewTime() {
                 return (
                   <Pressable
                     key={slot.getTime()}
-                    style={[styles.slotChip, isSelected && styles.chipSelected]}
+                    style={[styles.slotChip, isSelected && styles.slotChipSelected]}
                     onPress={() => setSelectedSlot(slot)}
                   >
-                    <Text style={[styles.slotText, isSelected && styles.textSelected]}>{formatTime(slot)}</Text>
+                    <Text style={[styles.slotText, isSelected && styles.slotTextSelected]}>{formatTime(slot)}</Text>
                   </Pressable>
                 );
               })}
@@ -277,18 +286,27 @@ export default function SuggestNewTime() {
         </>
       )}
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={ui.error}>{error}</Text>}
 
       {selectedSlot && (
-        <View style={styles.confirmBox}>
-          <Text style={styles.summary}>
-            Suggest {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
-          </Text>
-          <Text style={styles.help}>
+        <View style={styles.summaryCard}>
+          <View style={styles.line}>
+            <Ionicons name="calendar-outline" size={15} color={colors.textFaint} />
+            <Text style={styles.oldTime}>
+              {formatDay(currentTime)} at {formatTime(currentTime)}
+            </Text>
+          </View>
+          <View style={styles.line}>
+            <Ionicons name="arrow-forward" size={15} color={colors.info} />
+            <Text style={styles.newTime}>
+              {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
+            </Text>
+          </View>
+          <Text style={ui.help}>
             The booking moves to this time straight away. If the customer declines, it will be cancelled.
           </Text>
-          <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSend} disabled={saving}>
-            {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Send new time</Text>}
+          <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleSend} disabled={saving}>
+            {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Send new time</Text>}
           </Pressable>
         </View>
       )}
@@ -297,23 +315,16 @@ export default function SuggestNewTime() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  card: { borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16 },
-  serviceName: { fontSize: 18, fontWeight: '700', color: '#000000' },
-  details: { fontSize: 14, color: '#666666', marginTop: 4 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 28, marginBottom: 12 },
-  chipSelected: { backgroundColor: '#000000', borderColor: '#000000' },
-  textSelected: { color: '#ffffff' },
-  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  slotChip: { width: '30%', borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  slotText: { fontSize: 16, color: '#000000' },
-  message: { fontSize: 15, color: '#666666' },
-  confirmBox: { borderTopWidth: 1, borderTopColor: '#eeeeee', marginTop: 28, paddingTop: 20 },
-  summary: { fontSize: 16, fontWeight: '600', color: '#000000' },
-  help: { fontSize: 14, color: '#666666', marginTop: 6 },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 16 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  error: { color: '#c62828', marginTop: 16 },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
+  serviceName: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginBottom: spacing.xs },
+  line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
+  lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
+  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  slotChip: { width: '31%', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
+  slotChipSelected: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
+  slotText: { fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  slotTextSelected: { color: colors.onAccent },
+  summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.info, padding: spacing.lg, marginTop: 28 },
+  oldTime: { flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.textFaint, textDecorationLine: 'line-through' },
+  newTime: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.info },
 });
