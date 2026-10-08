@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 export type Suggestion = { placeId: string; text: string };
-export type Place = { address: string; lat: number; lng: number };
+export type Place = { address: string; lat: number; lng: number; area?: string };
 export type Point = { lat: number; lng: number };
 export type TravelTime = { minutes: number; km: number };
 

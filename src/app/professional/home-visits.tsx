@@ -11,7 +11,7 @@ function toNumber(text: string) {
 
 export default function HomeVisits() {
   const [base, setBase] = useState<Place | null>(null);
-  const [area, setArea] = useState('');
+  const [savedArea, setSavedArea] = useState('');
   const [baseFee, setBaseFee] = useState('');
   const [includedKm, setIncludedKm] = useState('');
   const [perKm, setPerKm] = useState('');
@@ -42,7 +42,7 @@ export default function HomeVisits() {
           .single(),
       ]);
 
-      if (professional?.location) setArea(professional.location);
+      if (professional?.location) setSavedArea(professional.location);
 
       if (privateData) {
         setBase({ address: privateData.base_address, lat: privateData.base_lat, lng: privateData.base_lng });
@@ -61,6 +61,8 @@ export default function HomeVisits() {
     loadSettings();
   }, []);
 
+  const area = base?.area || savedArea;
+
   async function handleSave() {
     setError(null);
 
@@ -69,10 +71,6 @@ export default function HomeVisits() {
     const rate = toNumber(perKm);
     const max = maxKm.trim() === '' ? null : toNumber(maxKm);
 
-    if (!area.trim()) {
-      setError('Please enter the area customers will see, like your suburb and town.');
-      return;
-    }
     if (!base) {
       setError('Please search for your address and choose it from the list.');
       return;
@@ -121,7 +119,7 @@ export default function HomeVisits() {
     const { error: settingsError } = await supabase
       .from('professionals')
       .update({
-        location: area.trim(),
+        ...(area ? { location: area } : {}),
         call_out_fee: fee,
         call_out_included_km: included,
         call_out_per_km: rate,
@@ -154,21 +152,12 @@ export default function HomeVisits() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
       <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>Your area</Text>
-        <Text style={styles.help}>Shown to customers, so they know roughly where you are.</Text>
-        <TextInput
-          style={styles.input}
-          value={area}
-          onChangeText={setArea}
-          placeholder="e.g. Riverside, Mbombela"
-          placeholderTextColor="#999999"
-        />
-
-        <Text style={styles.label}>Where do you travel from?</Text>
+        <Text style={styles.label}>Where do you work from?</Text>
         <Text style={styles.help}>
-          Used to work out distances and travel times. It's private: customers never see it.
+          Your full address is private. Customers only see your area.
         </Text>
         <AddressInput value={base} onChange={setBase} />
+        {area ? <Text style={styles.areaText}>Customers will see: {area}</Text> : null}
 
         <Text style={styles.sectionTitle}>Home visit pricing</Text>
 
@@ -188,7 +177,7 @@ export default function HomeVisits() {
         <TextInput style={styles.input} value={maxKm} onChangeText={setMaxKm} keyboardType="decimal-pad" />
 
         <Text style={styles.note}>
-          Distances are measured in a straight line from where you travel from, which is usually a little shorter than the drive.
+          Distances are measured in a straight line from where you work, which is usually a little shorter than the drive.
         </Text>
 
         {error && <Text style={styles.error}>{error}</Text>}
@@ -207,6 +196,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 32 },
   label: { fontSize: 16, fontWeight: '600', color: '#000000', marginTop: 20 },
   help: { fontSize: 14, color: '#666666', marginTop: 4, marginBottom: 8 },
+  areaText: { fontSize: 14, color: '#1b7a3d', fontWeight: '600', marginTop: 8 },
   input: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, padding: 12, fontSize: 16, color: '#000000', marginTop: 4 },
   note: { fontSize: 13, color: '#666666', marginTop: 20 },
   error: { color: '#c62828', marginTop: 16 },

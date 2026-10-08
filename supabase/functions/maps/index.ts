@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
       return json({ suggestions });
     }
 
-    // 2. Full address and coordinates for a chosen suggestion
+       // 2. Full address, coordinates and area for a chosen suggestion
     if (body.action === 'geocode') {
       const placeId = typeof body.placeId === 'string' ? body.placeId : '';
       if (!placeId) return json({ error: 'Missing address.' }, 400);
@@ -77,10 +77,19 @@ Deno.serve(async (req) => {
       if (data.status !== 'OK' || !data.results?.length) return json({ error: 'Address not found.' }, 404);
 
       const result = data.results[0];
+      const components: { long_name: string; types: string[] }[] = result.address_components ?? [];
+      const find = (...types: string[]) =>
+        components.find((c) => types.some((t) => c.types.includes(t)))?.long_name;
+
+      const suburb = find('sublocality_level_1', 'sublocality', 'neighborhood');
+      const town = find('locality', 'administrative_area_level_2');
+      const area = [suburb, town].filter((part, i, all) => part && all.indexOf(part) === i).join(', ');
+
       return json({
         address: result.formatted_address,
         lat: result.geometry.location.lat,
         lng: result.geometry.location.lng,
+        area: area || town || '',
       });
     }
 
