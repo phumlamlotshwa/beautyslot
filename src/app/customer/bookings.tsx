@@ -4,12 +4,16 @@ import { ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, Vie
 import { formatPrice } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
-type Status = 'pending' | 'confirmed' | 'cancelled' | 'completed';
+type Status = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'reschedule_proposed';
 
 type Booking = {
   id: number;
   starts_at: string;
+  previous_starts_at: string | null;
   status: Status;
+  location_type: 'at_professional' | 'at_customer';
+  address: string | null;
+  call_out_fee: number;
   services: { name: string; price: number } | null;
   professionals: { first_name: string; last_name: string } | null;
 };
@@ -19,6 +23,7 @@ const statusStyles: Record<Status, { label: string; color: string; background: s
   confirmed: { label: 'Confirmed', color: '#1b7a3d', background: '#e6f6ec' },
   cancelled: { label: 'Cancelled', color: '#777777', background: '#f0f0f0' },
   completed: { label: 'Completed', color: '#1f4fa3', background: '#e8eefa' },
+  reschedule_proposed: { label: 'New time suggested', color: '#6a3fb5', background: '#f1ebfb' },
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -33,6 +38,7 @@ function formatBookingTime(iso: string) {
 export default function MyBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadBookings = useCallback(async () => {
@@ -47,7 +53,9 @@ export default function MyBookings() {
 
     const { data, error: loadError } = await supabase
       .from('bookings')
-      .select('id, starts_at, status, services(name, price), professionals(first_name, last_name)')
+      .select(
+        'id, starts_at, previous_starts_at, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name)'
+      )
       .eq('customer_id', user.id)
       .order('starts_at', { ascending: true });
 
@@ -65,6 +73,36 @@ export default function MyBookings() {
       loadBookings();
     }, [loadBookings])
   );
+
+  async function respond(booking: Booking, accept: boolean) {
+    setError(null);
+    setAnsweringId(booking.id);
+
+    const { error: respondError } = await supabase.rpc('respond_to_reschedule', {
+      p_booking_id: booking.id,
+      p_accept: accept,
+    });
+
+    setAnsweringId(null);
+
+    if (respondError) {
+      setError(respondError.message);
+      return;
+    }
+
+    loadBookings();
+  }
+
+  function handleDecline(booking: Booking) {
+    Alert.alert(
+      'Decline the new time?',
+      'Your booking will be cancelled. You can book a different time afterwards.',
+      [
+        { text: 'Go back', style: 'cancel' },
+        { text: 'Decline', style: 'destructive', onPress: () => respond(booking, false) },
+      ]
+    );
+  }
 
   function handleCancel(booking: Booking) {
     Alert.alert(
@@ -95,7 +133,9 @@ export default function MyBookings() {
 
   const now = Date.now();
   const upcoming = bookings.filter(
-    (b) => new Date(b.starts_at).getTime() >= now && (b.status === 'pending' || b.status === 'confirmed')
+    (b) =>
+      new Date(b.starts_at).getTime() >= now &&
+      (b.status === 'pending' || b.status === 'confirmed' || b.status === 'reschedule_proposed')
   );
   const past = bookings.filter((b) => !upcoming.includes(b)).reverse();
 
@@ -123,11 +163,15 @@ export default function MyBookings() {
           section.data.length === 0 ? <Text style={styles.empty}>{section.empty}</Text> : null
         }
         renderItem={({ item, section }) => {
-          const status = statusStyles[item.status];
-          const canCancel = section.title === 'Upcoming';
+          const status = statusStyles[item.status] ?? statusStyles.pending;
+          const isUpcoming = section.title === 'Upcoming';
+          const isProposal = item.status === 'reschedule_proposed';
+          const isHome = item.location_type === 'at_customer';
+          const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
+          const answering = answeringId === item.id;
 
           return (
-            <View style={styles.card}>
+            <View style={[styles.card, isProposal && isUpcoming && styles.proposalCard]}>
               <View style={styles.cardTop}>
                 <Text style={styles.serviceName}>{item.services?.name ?? 'Service'}</Text>
                 <View style={[styles.badge, { backgroundColor: status.background }]}>
@@ -137,12 +181,39 @@ export default function MyBookings() {
               <Text style={styles.details}>
                 with {item.professionals?.first_name} {item.professionals?.last_name}
               </Text>
-              <Text style={styles.details}>{formatBookingTime(item.starts_at)}</Text>
-              {item.services && <Text style={styles.price}>{formatPrice(item.services.price)}</Text>}
 
-              {canCancel && (
-                <Pressable style={styles.cancelButton} onPress={() => handleCancel(item)}>
-                  <Text style={styles.cancelText}>Cancel booking</Text>
+              {isProposal && isUpcoming && item.previous_starts_at ? (
+                <>
+                  <Text style={styles.oldTime}>{formatBookingTime(item.previous_starts_at)}</Text>
+                  <Text style={styles.newTime}>New time: {formatBookingTime(item.starts_at)}</Text>
+                </>
+              ) : (
+                <Text style={styles.details}>{formatBookingTime(item.starts_at)}</Text>
+              )}
+
+              {isHome && <Text style={styles.details}>At your home: {item.address}</Text>}
+
+              <Text style={styles.price}>
+                {formatPrice(total)}
+                {isHome && Number(item.call_out_fee) > 0 ? ` (incl. ${formatPrice(item.call_out_fee)} call-out)` : ''}
+              </Text>
+
+              {answering && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
+
+              {!answering && isUpcoming && isProposal && (
+                <View style={styles.actions}>
+                  <Pressable style={[styles.actionButton, styles.primary]} onPress={() => respond(item, true)}>
+                    <Text style={styles.primaryText}>Accept</Text>
+                  </Pressable>
+                  <Pressable style={[styles.actionButton, styles.danger]} onPress={() => handleDecline(item)}>
+                    <Text style={styles.dangerText}>Decline</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {!answering && isUpcoming && !isProposal && (
+                <Pressable style={[styles.actionButton, styles.danger, { marginTop: 12 }]} onPress={() => handleCancel(item)}>
+                  <Text style={styles.dangerText}>Cancel booking</Text>
                 </Pressable>
               )}
             </View>
@@ -160,12 +231,19 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 8, marginBottom: 12 },
   empty: { fontSize: 15, color: '#666666', marginBottom: 24 },
   card: { borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16, marginBottom: 12 },
+  proposalCard: { borderColor: '#6a3fb5', borderWidth: 2 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   serviceName: { flex: 1, fontSize: 16, fontWeight: '600', color: '#000000' },
   badge: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 },
   badgeText: { fontSize: 12, fontWeight: '600' },
   details: { fontSize: 14, color: '#666666', marginTop: 4 },
+  oldTime: { fontSize: 14, color: '#999999', marginTop: 4, textDecorationLine: 'line-through' },
+  newTime: { fontSize: 15, color: '#6a3fb5', fontWeight: '700', marginTop: 4 },
   price: { fontSize: 15, fontWeight: '600', color: '#000000', marginTop: 8 },
-  cancelButton: { borderWidth: 1, borderColor: '#c62828', borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 12 },
-  cancelText: { color: '#c62828', fontSize: 15, fontWeight: '600' },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  actionButton: { flex: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1 },
+  primary: { backgroundColor: '#000000', borderColor: '#000000' },
+  primaryText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
+  danger: { borderColor: '#c62828' },
+  dangerText: { color: '#c62828', fontSize: 15, fontWeight: '600' },
 });
