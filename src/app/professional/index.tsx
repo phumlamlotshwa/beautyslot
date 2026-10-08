@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
@@ -12,6 +12,11 @@ export default function ProfessionalHome() {
     <View style={styles.screen}>
       <Text style={styles.title}>Professional home</Text>
       <Text style={styles.text}>This is where you'll manage your services and bookings.</Text>
+            <Link href="/professional/add-service" asChild>
+        <Pressable style={styles.button}>
+          <Text style={styles.buttonText}>Add a service</Text>
+        </Pressable>
+      </Link>
       <Pressable style={styles.button} onPress={handleLogOut}>
         <Text style={styles.buttonText}>Log out</Text>
       </Pressable>
