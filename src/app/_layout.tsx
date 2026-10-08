@@ -27,6 +27,7 @@ export default function RootLayout() {
         <Stack.Screen name="chat/[conversationId]" options={{ title: 'Chat' }} />
         <Stack.Screen name="messages" options={{ title: 'Messages' }} />
         <Stack.Screen name="professional/home-visits" options={{ title: 'Home visits' }} />
+        <Stack.Screen name="professional/reschedule/[bookingId]" options={{ title: 'Suggest a new time' }} />
       </Stack>
     </ThemeProvider>
   );

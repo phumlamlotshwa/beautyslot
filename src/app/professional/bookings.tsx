@@ -1,11 +1,11 @@
-import { useFocusEffect } from 'expo-router';
+import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { ConfirmHomeVisit } from '../../components/confirm-home-visit';
 import { formatPrice } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
-type Status = 'pending' | 'confirmed' | 'cancelled' | 'completed';
+type Status = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'reschedule_proposed';
 
 type Booking = {
   id: number;
@@ -26,6 +26,7 @@ const statusStyles: Record<Status, { label: string; color: string; background: s
   confirmed: { label: 'Confirmed', color: '#1b7a3d', background: '#e6f6ec' },
   cancelled: { label: 'Cancelled', color: '#777777', background: '#f0f0f0' },
   completed: { label: 'Completed', color: '#1f4fa3', background: '#e8eefa' },
+  reschedule_proposed: { label: 'New time sent', color: '#6a3fb5', background: '#f1ebfb' },
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -138,8 +139,11 @@ export default function ProfessionalBookings() {
   const isUpcoming = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
   const waiting = bookings.filter((b) => b.status === 'pending' && isUpcoming(b));
-  const upcoming = bookings.filter((b) => b.status === 'confirmed' && isUpcoming(b));
+    const upcoming = bookings.filter(
+    (b) => (b.status === 'confirmed' || b.status === 'reschedule_proposed') && isUpcoming(b)
+  );
   const past = bookings.filter((b) => !waiting.includes(b) && !upcoming.includes(b)).reverse();
+  
 
   if (loading) {
     return (
@@ -201,6 +205,13 @@ export default function ProfessionalBookings() {
               </Text>
 
               {busy && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
+                            {!busy && (section.title === 'Waiting for you' || section.title === 'Upcoming') && (
+                <Link href={{ pathname: '/professional/reschedule/[bookingId]', params: { bookingId: String(item.id) } }} asChild>
+                  <Pressable style={styles.suggestButton}>
+                    <Text style={styles.outlineText}>Suggest a new time</Text>
+                  </Pressable>
+                </Link>
+              )}
 
               {!busy && section.title === 'Waiting for you' && (
                 <View style={styles.actions}>
@@ -267,4 +278,5 @@ const styles = StyleSheet.create({
   dangerText: { color: '#c62828', fontSize: 15, fontWeight: '600' },
   outline: { borderColor: '#000000' },
   outlineText: { color: '#000000', fontSize: 15, fontWeight: '600' },
+    suggestButton: { borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#000000', marginTop: 12 },
 });
