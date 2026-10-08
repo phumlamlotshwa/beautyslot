@@ -1,29 +1,23 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { formatPrice } from '../../lib/format';
+import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
-
-type Status = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'reschedule_proposed';
+import { colors, fonts, radius, spacing } from '../../lib/theme';
+import { ui } from '../../lib/ui';
 
 type Booking = {
   id: number;
   starts_at: string;
   previous_starts_at: string | null;
-  status: Status;
+  status: BookingStatus;
   location_type: 'at_professional' | 'at_customer';
   address: string | null;
   call_out_fee: number;
   services: { name: string; price: number } | null;
   professionals: { first_name: string; last_name: string } | null;
-};
-
-const statusStyles: Record<Status, { label: string; color: string; background: string }> = {
-  pending: { label: 'Pending', color: '#b26a00', background: '#fff4e0' },
-  confirmed: { label: 'Confirmed', color: '#1b7a3d', background: '#e6f6ec' },
-  cancelled: { label: 'Cancelled', color: '#777777', background: '#f0f0f0' },
-  completed: { label: 'Completed', color: '#1f4fa3', background: '#e8eefa' },
-  reschedule_proposed: { label: 'New time suggested', color: '#6a3fb5', background: '#f1ebfb' },
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -45,6 +39,19 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+    const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
+
+  function toggleSection(title: string) {
+    setClosed((current) => {
+      const next = new Set(current);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  }
 
   const loadBookings = useCallback(async () => {
     setError(null);
@@ -156,68 +163,113 @@ export default function MyBookings() {
   }
 
   const now = Date.now();
-  const upcoming = bookings.filter(
-    (b) =>
-      new Date(b.starts_at).getTime() >= now &&
-      (b.status === 'pending' || b.status === 'confirmed' || b.status === 'reschedule_proposed')
-  );
-  const past = bookings.filter((b) => !upcoming.includes(b)).reverse();
+  const isFuture = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
+  const confirmed = bookings.filter((b) => b.status === 'confirmed' && isFuture(b));
+  const pending = bookings.filter(
+    (b) => (b.status === 'pending' || b.status === 'reschedule_proposed') && isFuture(b)
+  );
+  const cancelled = bookings.filter((b) => b.status === 'cancelled').reverse();
+  const history = bookings
+    .filter((b) => b.status !== 'cancelled' && !confirmed.includes(b) && !pending.includes(b))
+    .reverse();
+
+    const sections = [
+    { title: 'Confirmed', items: confirmed },
+    { title: 'Pending', items: pending },
+    { title: 'Cancelled', items: cancelled },
+    { title: 'History', items: history },
+  ]
+    .filter((s) => s.items.length > 0)
+    .map((s) => ({
+      title: s.title,
+      count: s.items.length,
+      isOpen: !closed.has(s.title),
+      data: closed.has(s.title) ? [] : s.items,
+    }));
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={ui.screen}>
       <SectionList
-        sections={[
-          { title: 'Upcoming', data: upcoming, empty: "You don't have any upcoming bookings." },
-          { title: 'Past and cancelled', data: past, empty: 'Nothing here yet.' },
-        ]}
+        sections={sections}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={ui.content}
         stickySectionHeadersEnabled={false}
-        ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
-        renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
-        renderSectionFooter={({ section }) =>
-          section.data.length === 0 ? <Text style={styles.empty}>{section.empty}</Text> : null
+        ListHeaderComponent={error ? <Text style={ui.error}>{error}</Text> : null}
+        ListEmptyComponent={
+          <View style={styles.emptyBox}>
+            <Ionicons name="calendar-outline" size={40} color={colors.textFaint} />
+            <Text style={styles.emptyTitle}>No bookings yet</Text>
+            <Text style={styles.emptyText}>When you book a professional, it'll show up here.</Text>
+          </View>
         }
-        renderItem={({ item, section }) => {
-          const status = statusStyles[item.status] ?? statusStyles.pending;
-          const isUpcoming = section.title === 'Upcoming';
-          const isProposal = item.status === 'reschedule_proposed';
+                renderSectionHeader={({ section }) => (
+          <Pressable style={styles.sectionHeader} onPress={() => toggleSection(section.title)}>
+            <Text style={styles.sectionTitle}>
+              {section.title} <Text style={styles.sectionCount}>({section.count})</Text>
+            </Text>
+            <Ionicons name={section.isOpen ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
+          </Pressable>
+        )}
+        renderItem={({ item }) => {
+          const status = statusStyle(item.status, 'customer');
+          const future = isFuture(item);
+          const isProposal = item.status === 'reschedule_proposed' && future;
+          const canCancel = future && (item.status === 'pending' || item.status === 'confirmed');
           const isHome = item.location_type === 'at_customer';
           const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
           const answering = answeringId === item.id;
-          const showProAddress = isUpcoming && !isHome && item.status === 'confirmed';
+          const showProAddress = future && !isHome && item.status === 'confirmed';
           const proAddress = proAddresses[item.id];
+          const faded = item.status === 'cancelled' || !future;
 
           return (
-            <View style={[styles.card, isProposal && isUpcoming && styles.proposalCard]}>
+            <View style={[styles.card, isProposal && styles.proposalCard, faded && styles.fadedCard]}>
               <View style={styles.cardTop}>
                 <Text style={styles.serviceName}>{item.services?.name ?? 'Service'}</Text>
                 <View style={[styles.badge, { backgroundColor: status.background }]}>
                   <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
                 </View>
               </View>
-              <Text style={styles.details}>
-                with {item.professionals?.first_name} {item.professionals?.last_name}
-              </Text>
 
-              {isProposal && isUpcoming && item.previous_starts_at ? (
+              <View style={styles.line}>
+                <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+                <Text style={styles.lineText}>
+                  {item.professionals?.first_name} {item.professionals?.last_name}
+                </Text>
+              </View>
+
+              {isProposal && item.previous_starts_at ? (
                 <>
-                  <Text style={styles.oldTime}>{formatBookingTime(item.previous_starts_at)}</Text>
-                  <Text style={styles.newTime}>New time: {formatBookingTime(item.starts_at)}</Text>
+                  <View style={styles.line}>
+                    <Ionicons name="calendar-outline" size={15} color={colors.textFaint} />
+                    <Text style={styles.oldTime}>{formatBookingTime(item.previous_starts_at)}</Text>
+                  </View>
+                  <View style={styles.line}>
+                    <Ionicons name="arrow-forward" size={15} color={colors.info} />
+                    <Text style={styles.newTime}>{formatBookingTime(item.starts_at)}</Text>
+                  </View>
                 </>
               ) : (
-                <Text style={styles.details}>{formatBookingTime(item.starts_at)}</Text>
+                <View style={styles.line}>
+                  <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
+                  <Text style={styles.lineText}>{formatBookingTime(item.starts_at)}</Text>
+                </View>
               )}
 
-              {isHome && <Text style={styles.details}>At your home: {item.address}</Text>}
+              {isHome && (
+                <View style={styles.line}>
+                  <Ionicons name="home-outline" size={15} color={colors.textMuted} />
+                  <Text style={styles.lineText}>At your home</Text>
+                </View>
+              )}
 
               {showProAddress && (
                 <View style={styles.addressBox}>
@@ -226,6 +278,7 @@ export default function MyBookings() {
                       <Text style={styles.addressLabel}>Where to go</Text>
                       <Text style={styles.addressText}>{proAddress}</Text>
                       <Pressable style={styles.directionsButton} onPress={() => openDirections(proAddress)}>
+                        <Ionicons name="navigate-outline" size={15} color={colors.accentDark} />
                         <Text style={styles.directionsText}>Get directions</Text>
                       </Pressable>
                     </>
@@ -237,14 +290,16 @@ export default function MyBookings() {
                 </View>
               )}
 
-              <Text style={styles.price}>
-                {formatPrice(total)}
-                {isHome && Number(item.call_out_fee) > 0 ? ` (incl. ${formatPrice(item.call_out_fee)} call-out)` : ''}
-              </Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.price}>{formatPrice(total)}</Text>
+                {isHome && Number(item.call_out_fee) > 0 && (
+                  <Text style={styles.priceNote}>incl. {formatPrice(item.call_out_fee)} call-out</Text>
+                )}
+              </View>
 
-              {answering && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
+              {answering && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
 
-              {!answering && isUpcoming && isProposal && (
+              {!answering && isProposal && (
                 <View style={styles.actions}>
                   <Pressable style={[styles.actionButton, styles.primary]} onPress={() => respond(item, true)}>
                     <Text style={styles.primaryText}>Accept</Text>
@@ -255,9 +310,9 @@ export default function MyBookings() {
                 </View>
               )}
 
-              {!answering && isUpcoming && !isProposal && (
-                <Pressable style={[styles.actionButton, styles.danger, { marginTop: 12 }]} onPress={() => handleCancel(item)}>
-                  <Text style={styles.dangerText}>Cancel booking</Text>
+              {!answering && canCancel && (
+                <Pressable style={styles.cancelLink} onPress={() => handleCancel(item)}>
+                  <Text style={styles.cancelText}>Cancel booking</Text>
                 </Pressable>
               )}
             </View>
@@ -269,30 +324,37 @@ export default function MyBookings() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  error: { color: '#c62828', marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 8, marginBottom: 12 },
-  empty: { fontSize: 15, color: '#666666', marginBottom: 24 },
-  card: { borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16, marginBottom: 12 },
-  proposalCard: { borderColor: '#6a3fb5', borderWidth: 2 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  serviceName: { flex: 1, fontSize: 16, fontWeight: '600', color: '#000000' },
-  badge: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 },
-  badgeText: { fontSize: 12, fontWeight: '600' },
-  details: { fontSize: 14, color: '#666666', marginTop: 4 },
-  oldTime: { fontSize: 14, color: '#999999', marginTop: 4, textDecorationLine: 'line-through' },
-  newTime: { fontSize: 15, color: '#6a3fb5', fontWeight: '700', marginTop: 4 },
-  addressBox: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, marginTop: 10 },
-  addressLabel: { fontSize: 13, fontWeight: '700', color: '#000000' },
-  addressText: { fontSize: 14, color: '#333333', marginTop: 4 },
-  directionsButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#000000', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 14, marginTop: 10 },
-  directionsText: { fontSize: 14, fontWeight: '600', color: '#000000' },
-  price: { fontSize: 15, fontWeight: '600', color: '#000000', marginTop: 8 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  actionButton: { flex: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1 },
-  primary: { backgroundColor: '#000000', borderColor: '#000000' },
-  primaryText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
-  danger: { borderColor: '#c62828' },
-  dangerText: { color: '#c62828', fontSize: 15, fontWeight: '600' },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
+  sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
+  sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
+  emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
+  emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
+  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginBottom: spacing.md },
+  proposalCard: { borderColor: colors.info, borderWidth: 2 },
+  fadedCard: { opacity: 0.75 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
+  serviceName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
+  badgeText: { fontFamily: fonts.medium, fontSize: 12 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
+  lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
+  oldTime: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textFaint, textDecorationLine: 'line-through' },
+  newTime: { flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.info },
+  addressBox: { backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  addressLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
+  addressText: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, marginTop: 4 },
+  directionsButton: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accentDark, borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 14, marginTop: spacing.md },
+  directionsText: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md },
+  price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  priceNote: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  actionButton: { flex: 1, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center', borderWidth: 1 },
+  primary: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
+  primaryText: { fontFamily: fonts.medium, fontSize: 15, color: colors.onAccent },
+  danger: { borderColor: colors.danger, backgroundColor: colors.surface },
+  dangerText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
+  cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
+  cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
 });
