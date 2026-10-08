@@ -2,13 +2,14 @@ import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getOrCreateConversation } from '../../../lib/chat';
-import { formatDuration, formatPrice, professionLabels } from '../../../lib/format';
+import { formatDuration, formatPrice, OfferedAt, offeredAtLabels, professionLabels } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
 
 type Service = {
   id: number;
   name: string;
   category: string;
+  offered_at: OfferedAt;
   price: number;
   duration_minutes: number;
 };
@@ -33,7 +34,8 @@ export default function ProfessionalProfile() {
     async function loadProfile() {
       const { data, error: loadError } = await supabase
         .from('professionals')
-        .select('id, first_name, last_name, profession, location, services(id, name, category, price, duration_minutes)')
+        .select('id, first_name, last_name, profession, location, services(id, name, category, offered_at, price, duration_minutes)')
+        
         .eq('id', id)
         .single();
 
@@ -126,6 +128,9 @@ export default function ProfessionalProfile() {
                 <Text style={styles.serviceDetails}>
                   {item.category} · {formatDuration(item.duration_minutes)}
                 </Text>
+                                {item.offered_at !== 'at_professional' && (
+                  <Text style={styles.homeLabel}>{offeredAtLabels[item.offered_at]}</Text>
+                )}
               </View>
               <Text style={styles.price}>{formatPrice(item.price)}</Text>
             </Pressable>
@@ -153,4 +158,5 @@ const styles = StyleSheet.create({
   serviceName: { fontSize: 16, fontWeight: '600', color: '#000000' },
   serviceDetails: { fontSize: 14, color: '#666666', marginTop: 4 },
   price: { fontSize: 15, fontWeight: '600', color: '#000000', marginLeft: 12 },
+    homeLabel: { fontSize: 13, color: '#1b7a3d', fontWeight: '600', marginTop: 4 },
 });
