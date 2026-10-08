@@ -74,6 +74,11 @@ export default function ProfessionalHome() {
                 <Text style={styles.secondaryButtonText}>Set working hours</Text>
               </Pressable>
             </Link>
+                        <Link href="/professional/home-visits" asChild>
+              <Pressable style={styles.outlineButton}>
+                <Text style={styles.secondaryButtonText}>Home visits</Text>
+              </Pressable>
+            </Link>
             <Link href="/professional/add-service" asChild>
               <Pressable style={styles.button}>
                 <Text style={styles.buttonText}>Add a service</Text>
