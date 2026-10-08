@@ -1,6 +1,6 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MonthCalendar } from '../../../components/month-calendar';
 import { formatDuration, formatPrice } from '../../../lib/format';
 import { BusyTime, getOpenSlots } from '../../../lib/slots';
@@ -20,7 +20,6 @@ type Hours = {
   end_time: string;
 };
 
-
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -31,7 +30,7 @@ function formatTime(date: Date) {
 export default function BookService() {
   const { serviceId } = useLocalSearchParams<{ serviceId: string }>();
 
-     const today = new Date();
+  const today = new Date();
   const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
   const [service, setService] = useState<Service | null>(null);
@@ -44,6 +43,8 @@ export default function BookService() {
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -86,7 +87,6 @@ export default function BookService() {
       if (!service) return;
 
       setLoadingMonth(true);
-      setError(null);
 
       const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
       const monthEnd = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1);
@@ -135,18 +135,20 @@ export default function BookService() {
     return () => {
       cancelled = true;
     };
-  }, [service, hours, visibleMonth]);
+  }, [service, hours, visibleMonth, refreshKey]);
 
   function changeMonth(month: Date) {
     setVisibleMonth(month);
     setSelectedDate(null);
     setSelectedSlot(null);
     setSlots([]);
+    setError(null);
   }
 
   function selectDate(date: Date) {
     setSelectedDate(date);
     setSelectedSlot(null);
+    setError(null);
 
     const dayHours = hours.find((h) => h.day_of_week === date.getDay());
 
@@ -163,6 +165,53 @@ export default function BookService() {
         service.duration_minutes,
         monthBusy
       )
+    );
+  }
+
+  async function handleConfirm() {
+    if (!service || !selectedSlot) return;
+
+    setError(null);
+    setConfirming(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError('You need to be logged in to book.');
+      setConfirming(false);
+      return;
+    }
+
+    const startsAt = selectedSlot;
+    const endsAt = new Date(selectedSlot.getTime() + service.duration_minutes * 60 * 1000);
+
+    const { error: bookingError } = await supabase.from('bookings').insert({
+      customer_id: user.id,
+      professional_id: service.professional_id,
+      service_id: service.id,
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+    });
+
+    setConfirming(false);
+
+    if (bookingError) {
+      if (bookingError.code === '23P01') {
+        setError('Sorry, someone just booked that time. Please choose another.');
+        setSelectedDate(null);
+        setSelectedSlot(null);
+        setSlots([]);
+        setRefreshKey((k) => k + 1);
+      } else {
+        setError(bookingError.message);
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Booking requested',
+      `${service.name} on ${dayNames[startsAt.getDay()]} ${startsAt.getDate()} ${monthNames[startsAt.getMonth()]} at ${formatTime(startsAt)}. The professional will confirm it soon.`,
+      [{ text: 'OK', onPress: () => router.dismissTo('/customer') }]
     );
   }
 
@@ -239,13 +288,23 @@ export default function BookService() {
         </>
       )}
 
-      {selectedSlot && (
-        <Text style={styles.summary}>
-          You picked {dayNames[selectedSlot.getDay()]} {selectedSlot.getDate()} {monthNames[selectedSlot.getMonth()]} at {formatTime(selectedSlot)}
-        </Text>
-      )}
-
       {error && <Text style={styles.error}>{error}</Text>}
+
+      {selectedSlot && (
+        <View style={styles.confirmBox}>
+          <Text style={styles.summary}>
+            {service.name} on {dayNames[selectedSlot.getDay()]} {selectedSlot.getDate()} {monthNames[selectedSlot.getMonth()]} at {formatTime(selectedSlot)}
+          </Text>
+          <Text style={styles.summaryPrice}>{formatPrice(service.price)}</Text>
+          <Pressable
+            style={[styles.button, confirming && styles.buttonDisabled]}
+            onPress={handleConfirm}
+            disabled={confirming}
+          >
+            {confirming ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Confirm booking</Text>}
+          </Pressable>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -264,6 +323,11 @@ const styles = StyleSheet.create({
   slotChip: { width: '30%', borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
   slotText: { fontSize: 16, color: '#000000' },
   message: { fontSize: 15, color: '#666666', marginTop: 8 },
-  summary: { fontSize: 16, fontWeight: '600', color: '#000000', marginTop: 24 },
+  confirmBox: { borderTopWidth: 1, borderTopColor: '#eeeeee', marginTop: 28, paddingTop: 20 },
+  summary: { fontSize: 16, fontWeight: '600', color: '#000000' },
+  summaryPrice: { fontSize: 15, color: '#666666', marginTop: 4 },
+  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 16 },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
   error: { color: '#c62828', marginTop: 16 },
 });
