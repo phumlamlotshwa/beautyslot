@@ -1,6 +1,6 @@
-import { useLocalSearchParams } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDuration, formatPrice, professionLabels } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
 
@@ -86,15 +86,17 @@ export default function ProfessionalProfile() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.serviceName}>{item.name}</Text>
-              <Text style={styles.serviceDetails}>
-                {item.category} · {formatDuration(item.duration_minutes)}
-              </Text>
-            </View>
-            <Text style={styles.price}>{formatPrice(item.price)}</Text>
-          </View>
+          <Link href={{ pathname: '/customer/book/[serviceId]', params: { serviceId: String(item.id) } }} asChild>
+            <Pressable style={styles.card}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.serviceName}>{item.name}</Text>
+                <Text style={styles.serviceDetails}>
+                  {item.category} · {formatDuration(item.duration_minutes)}
+                </Text>
+              </View>
+              <Text style={styles.price}>{formatPrice(item.price)}</Text>
+            </Pressable>
+          </Link>
         )}
       />
     </View>
