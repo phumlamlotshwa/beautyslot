@@ -52,6 +52,7 @@ export default function RootLayout() {
         <Stack.Screen name="professional/home-visits" options={{ title: 'Home visits' }} />
         <Stack.Screen name="professional/reschedule/[bookingId]" options={{ title: 'Suggest a new time' }} />
         <Stack.Screen name="professional/profile" options={{ title: 'My profile' }} />
+        <Stack.Screen name="customer/profile" options={{ title: 'My profile' }} />
       </Stack>
     </ThemeProvider>
   );

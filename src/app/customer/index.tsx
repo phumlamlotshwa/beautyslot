@@ -9,6 +9,8 @@ import { CustomerLocation, distanceKm, formatDistance, getStartingLocation } fro
 import { supabase } from '../../lib/supabase';
 import { colors, fonts, radius, spacing } from '../../lib/theme';
 import { ui } from '../../lib/ui';
+import { Avatar } from '../../components/avatar';
+import { customerPhotoUrls } from '../../lib/photos';
 
 type Professional = {
   id: string;
@@ -43,6 +45,8 @@ export default function CustomerHome() {
   const [maxDistance, setMaxDistance] = useState<number | null>(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [myName, setMyName] = useState('');
+  const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     getStartingLocation().then((location) => {
@@ -64,6 +68,15 @@ export default function CustomerHome() {
           setError(loadError.message);
         } else {
           setProfessionals((data ?? []) as unknown as Professional[]);
+        }
+                const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: me } = await supabase.from('customers').select('first_name, avatar_path').eq('id', user.id).single();
+          if (me) {
+            setMyName(me.first_name);
+            const urls = await customerPhotoUrls([me.avatar_path]);
+            setMyAvatarUrl(me.avatar_path ? urls[me.avatar_path] ?? null : null);
+          }
         }
 
         setLoading(false);
@@ -111,7 +124,14 @@ export default function CustomerHome() {
         contentContainerStyle={ui.content}
         ListHeaderComponent={
           <>
-            <Text style={ui.title}>Find a professional</Text>
+                      <View style={styles.titleRow}>
+              <Text style={[ui.title, { marginBottom: 0, flex: 1 }]}>Find a professional</Text>
+              <Link href="/customer/profile" asChild>
+                <Pressable hitSlop={8}>
+                  <Avatar name={myName || '?'} url={myAvatarUrl} size={42} />
+                </Pressable>
+              </Link>
+            </View>
 
             <View style={styles.topRow}>
               <Link href="/customer/bookings" asChild>
@@ -224,4 +244,5 @@ const styles = StyleSheet.create({
   distance: { fontFamily: fonts.medium, fontSize: 13, color: colors.accentDark },
   logOut: { alignItems: 'center', padding: spacing.lg, marginTop: spacing.lg },
   logOutText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
 });
