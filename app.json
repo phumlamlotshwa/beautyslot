@@ -34,11 +34,12 @@
         }
       ],
       [
-  "expo-location",
-  {
-    "locationWhenInUsePermission": "BeautySlot uses your location to show beauty professionals near you."
-  }
-]
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BeautySlot uses your location to show beauty professionals near you."
+        }
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

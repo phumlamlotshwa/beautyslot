@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getRole } from '../lib/get-role';
 import { supabase } from '../lib/supabase';
+import { colors, fonts, spacing } from '../lib/theme';
+import { ui } from '../lib/ui';
 
 export default function Welcome() {
   const [checking, setChecking] = useState(true);
@@ -29,38 +31,40 @@ export default function Welcome() {
 
   if (checking) {
     return (
-      <View style={styles.screen}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>BeautySlot</Text>
-      <Text style={styles.text}>Book beauty professionals near you.</Text>
+      <View style={styles.hero}>
+        <Text style={styles.brand}>BeautySlot</Text>
+        <Text style={styles.tagline}>Book beauty professionals near you, at their place or yours.</Text>
+      </View>
 
-      <Link href="/sign-up" asChild>
-        <Pressable style={styles.button}>
-          <Text style={styles.buttonText}>Create an account</Text>
-        </Pressable>
-      </Link>
+      <View>
+        <Link href="/sign-up" asChild>
+          <Pressable style={ui.button}>
+            <Text style={ui.buttonText}>Create an account</Text>
+          </Pressable>
+        </Link>
 
-      <Link href="/login" asChild>
-        <Pressable style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>I already have an account</Text>
-        </Pressable>
-      </Link>
+        <Link href="/login" asChild>
+          <Pressable style={styles.loginButton}>
+            <Text style={ui.outlineButtonText}>I already have an account</Text>
+          </Pressable>
+        </Link>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff', padding: 24, justifyContent: 'center' },
-  title: { fontSize: 34, fontWeight: '700', color: '#000000' },
-  text: { fontSize: 16, color: '#333333', marginTop: 8, marginBottom: 40 },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center' },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  secondaryButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 12 },
-  secondaryButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
+  screen: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, paddingTop: 120, paddingBottom: 48, justifyContent: 'space-between' },
+  hero: { alignItems: 'flex-start' },
+  brand: { fontFamily: fonts.bold, fontSize: 40, color: colors.accentDark },
+  tagline: { fontFamily: fonts.regular, fontSize: 18, lineHeight: 26, color: colors.textMuted, marginTop: spacing.md, maxWidth: 300 },
+  loginButton: { borderWidth: 1, borderColor: colors.accentDark, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: spacing.md },
 });
