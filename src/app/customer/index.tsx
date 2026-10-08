@@ -66,6 +66,11 @@ export default function CustomerHome() {
         ListHeaderComponent={
           <>
             <Text style={styles.title}>Find a professional</Text>
+                        <Link href="/customer/bookings" asChild>
+              <Pressable style={styles.outlineButton}>
+                <Text style={styles.outlineButtonText}>My bookings</Text>
+              </Pressable>
+            </Link>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
               {filters.map((f) => (
                 <Pressable
@@ -112,6 +117,7 @@ export default function CustomerHome() {
         ListFooterComponent={
           <Pressable style={styles.secondaryButton} onPress={handleLogOut}>
             <Text style={styles.secondaryButtonText}>Log out</Text>
+            
           </Pressable>
         }
       />
@@ -137,4 +143,6 @@ const styles = StyleSheet.create({
   details: { fontSize: 14, color: '#666666', marginTop: 4 },
   secondaryButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 24 },
   secondaryButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
+    outlineButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 16 },
+  outlineButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
 });
