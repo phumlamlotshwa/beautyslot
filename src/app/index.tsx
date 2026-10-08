@@ -21,6 +21,7 @@ export default function Index() {
       <Text style={{ fontSize: 24, color: '#000000' }}>Hello BeautySlot</Text>
       <Text style={{ marginTop: 12, color: '#000000' }}>{status}</Text>
       <Link href="/sign-up" style={{ marginTop: 24, color: '#000000', textDecorationLine: 'underline' }}>Go to sign up</Link>
+      <Link href="/login" style={{ marginTop: 16, color: '#000000', textDecorationLine: 'underline' }}>Go to log in</Link>
     </View>
   );
 }
