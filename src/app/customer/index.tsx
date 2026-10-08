@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -6,6 +7,8 @@ import { MessagesButton } from '../../components/messages-button';
 import { professionLabels } from '../../lib/format';
 import { CustomerLocation, distanceKm, formatDistance, getStartingLocation } from '../../lib/location';
 import { supabase } from '../../lib/supabase';
+import { colors, fonts, radius, spacing } from '../../lib/theme';
+import { ui } from '../../lib/ui';
 
 type Professional = {
   id: string;
@@ -101,20 +104,24 @@ export default function CustomerHome() {
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={ui.screen}>
       <FlatList
         data={shownProfessionals}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={ui.content}
         ListHeaderComponent={
           <>
-            <Text style={styles.title}>Find a professional</Text>
-            <Link href="/customer/bookings" asChild>
-              <Pressable style={styles.outlineButton}>
-                <Text style={styles.outlineButtonText}>My bookings</Text>
-              </Pressable>
-            </Link>
-            <MessagesButton />
+            <Text style={ui.title}>Find a professional</Text>
+
+            <View style={styles.topRow}>
+              <Link href="/customer/bookings" asChild>
+                <Pressable style={styles.topButton}>
+                  <Ionicons name="calendar-outline" size={20} color={colors.accentDark} />
+                  <Text style={styles.topButtonText}>My bookings</Text>
+                </Pressable>
+              </Link>
+              <MessagesButton style={{ flex: 1 }} />
+            </View>
 
             <LocationBar value={customerLocation} onChange={setCustomerLocation} />
 
@@ -122,10 +129,10 @@ export default function CustomerHome() {
               {filters.map((f) => (
                 <Pressable
                   key={f.value}
-                  style={[styles.chip, filter === f.value && styles.chipSelected]}
+                  style={[ui.chip, filter === f.value && ui.chipSelected]}
                   onPress={() => setFilter(f.value)}
                 >
-                  <Text style={[styles.chipText, filter === f.value && styles.chipTextSelected]}>{f.label}</Text>
+                  <Text style={[ui.chipText, filter === f.value && ui.chipTextSelected]}>{f.label}</Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -135,21 +142,21 @@ export default function CustomerHome() {
                 {distances.map((d) => (
                   <Pressable
                     key={d.label}
-                    style={[styles.chip, maxDistance === d.value && styles.chipSelected]}
+                    style={[styles.distanceChip, maxDistance === d.value && styles.distanceChipSelected]}
                     onPress={() => setMaxDistance(d.value)}
                   >
-                    <Text style={[styles.chipText, maxDistance === d.value && styles.chipTextSelected]}>{d.label}</Text>
+                    <Text style={[styles.distanceText, maxDistance === d.value && styles.distanceTextSelected]}>{d.label}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
             )}
 
-            {error && <Text style={styles.error}>{error}</Text>}
+            {error && <Text style={ui.error}>{error}</Text>}
           </>
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator style={{ marginTop: 32 }} color="#000000" />
+            <ActivityIndicator style={{ marginTop: spacing.xxl }} color={colors.accentDark} />
           ) : (
             <Text style={styles.empty}>{emptyMessage}</Text>
           )
@@ -157,8 +164,8 @@ export default function CustomerHome() {
         renderItem={({ item }) => (
           <Link href={{ pathname: '/customer/professional/[id]', params: { id: item.id } }} asChild>
             <Pressable style={styles.card}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{item.first_name.charAt(0)}</Text>
+              <View style={ui.avatar}>
+                <Text style={ui.avatarText}>{item.first_name.charAt(0)}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>
@@ -168,14 +175,20 @@ export default function CustomerHome() {
                   {professionLabels[item.profession] ?? item.profession}
                   {item.location ? ` · ${item.location}` : ''}
                 </Text>
-                {item.km !== null && <Text style={styles.distance}>{formatDistance(item.km)}</Text>}
+                {item.km !== null && (
+                  <View style={styles.distanceRow}>
+                    <Ionicons name="location-outline" size={14} color={colors.accentDark} />
+                    <Text style={styles.distance}>{formatDistance(item.km)}</Text>
+                  </View>
+                )}
               </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
             </Pressable>
           </Link>
         )}
         ListFooterComponent={
-          <Pressable style={styles.secondaryButton} onPress={handleLogOut}>
-            <Text style={styles.secondaryButtonText}>Log out</Text>
+          <Pressable style={styles.logOut} onPress={handleLogOut}>
+            <Text style={styles.logOutText}>Log out</Text>
           </Pressable>
         }
       />
@@ -184,24 +197,31 @@ export default function CustomerHome() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  title: { fontSize: 26, fontWeight: '700', color: '#000000', marginBottom: 16 },
-  outlineButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 12 },
-  outlineButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
-  filters: { gap: 8, paddingBottom: 16 },
-  chip: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  chipSelected: { backgroundColor: '#000000', borderColor: '#000000' },
-  chipText: { color: '#000000' },
-  chipTextSelected: { color: '#ffffff' },
-  error: { color: '#c62828', marginBottom: 16 },
-  empty: { fontSize: 16, color: '#666666', textAlign: 'center', marginTop: 32 },
-  card: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16, marginBottom: 12 },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarText: { color: '#ffffff', fontSize: 20, fontWeight: '700' },
-  name: { fontSize: 16, fontWeight: '600', color: '#000000' },
-  details: { fontSize: 14, color: '#666666', marginTop: 4 },
-  distance: { fontSize: 13, color: '#1b7a3d', fontWeight: '600', marginTop: 4 },
-  secondaryButton: { borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 24 },
-  secondaryButtonText: { color: '#000000', fontSize: 16, fontWeight: '600' },
+  topRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
+  topButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: 14,
+  },
+  topButtonText: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
+  filters: { gap: spacing.sm, paddingBottom: spacing.md },
+  distanceChip: { borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 14, backgroundColor: 'transparent' },
+  distanceChipSelected: { backgroundColor: colors.accentSoft },
+  distanceText: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
+  distanceTextSelected: { fontFamily: fonts.medium, color: colors.accentDark },
+  empty: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xxl },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  name: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  details: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 2 },
+  distanceRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  distance: { fontFamily: fonts.medium, fontSize: 13, color: colors.accentDark },
+  logOut: { alignItems: 'center', padding: spacing.lg, marginTop: spacing.lg },
+  logOutText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
 });

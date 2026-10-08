@@ -1,10 +1,16 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { getUnreadCount } from '../lib/chat';
 import { supabase } from '../lib/supabase';
+import { colors, fonts, radius, spacing } from '../lib/theme';
 
-export function MessagesButton() {
+type Props = {
+  style?: StyleProp<ViewStyle>;
+};
+
+export function MessagesButton({ style }: Props) {
   const [unread, setUnread] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -32,7 +38,8 @@ export function MessagesButton() {
 
   return (
     <Link href="/messages" asChild>
-      <Pressable style={styles.button}>
+      <Pressable style={StyleSheet.flatten([styles.button, style])}>
+        <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.accentDark} />
         <Text style={styles.text}>Messages</Text>
         {unread > 0 && (
           <View style={styles.badge}>
@@ -45,8 +52,18 @@ export function MessagesButton() {
 }
 
 const styles = StyleSheet.create({
-  button: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#000000', borderRadius: 8, padding: 14, marginBottom: 12 },
-  text: { color: '#000000', fontSize: 16, fontWeight: '600' },
-  badge: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  badgeText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  button: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: 14,
+  },
+  text: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
+  badge: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  badgeText: { fontFamily: fonts.bold, fontSize: 12, color: colors.onAccent },
 });

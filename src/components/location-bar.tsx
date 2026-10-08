@@ -1,7 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CustomerLocation, getCurrentLocation, getSavedLocation } from '../lib/location';
 import { Place } from '../lib/maps';
+import { colors, fonts, radius, spacing } from '../lib/theme';
 import { AddressInput } from './address-input';
 
 type Props = {
@@ -68,11 +70,12 @@ export function LocationBar({ value, onChange }: Props) {
   return (
     <>
       <Pressable style={styles.bar} onPress={() => setOpen(true)}>
-        <Text style={styles.barLabel}>Near:</Text>
+        <Ionicons name="location-outline" size={18} color={colors.accentDark} />
+        <Text style={styles.barLabel}>Near</Text>
         <Text style={styles.barValue} numberOfLines={1}>
           {value ? value.label : 'Choose your area'}
         </Text>
-        <Text style={styles.arrow}>▾</Text>
+        <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
       </Pressable>
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={close}>
@@ -82,17 +85,19 @@ export function LocationBar({ value, onChange }: Props) {
             <Text style={styles.title}>Show professionals near</Text>
 
             <Pressable style={styles.option} onPress={useCurrent} disabled={working}>
-              <Text style={styles.optionText}>📍 My current location</Text>
+              <Ionicons name="navigate-outline" size={20} color={colors.accentDark} />
+              <Text style={styles.optionText}>My current location</Text>
             </Pressable>
 
             <Pressable style={styles.option} onPress={useSaved} disabled={working}>
-              <Text style={styles.optionText}>🏠 My saved address</Text>
+              <Ionicons name="home-outline" size={20} color={colors.accentDark} />
+              <Text style={styles.optionText}>My saved address</Text>
             </Pressable>
 
             <Text style={styles.searchLabel}>Or search another area</Text>
             <AddressInput value={searchPlace} onChange={handlePlace} placeholder="Suburb, town or address" />
 
-            {working && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
+            {working && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
             {message && <Text style={styles.message}>{message}</Text>}
           </View>
         </KeyboardAvoidingView>
@@ -102,15 +107,25 @@ export function LocationBar({ value, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 16, marginBottom: 16 },
-  barLabel: { fontSize: 15, color: '#666666' },
-  barValue: { flex: 1, fontSize: 15, fontWeight: '600', color: '#000000' },
-  arrow: { fontSize: 14, color: '#666666' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)' },
-  sheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, paddingBottom: 40 },
-  title: { fontSize: 18, fontWeight: '700', color: '#000000', marginBottom: 12 },
-  option: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  optionText: { fontSize: 16, color: '#000000' },
-  searchLabel: { fontSize: 14, color: '#666666', marginTop: 20, marginBottom: 8 },
-  message: { fontSize: 14, color: '#c62828', marginTop: 12 },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  barLabel: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted },
+  barValue: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: colors.text },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)' },
+  sheet: { backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.xl, paddingBottom: 40 },
+  title: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginBottom: spacing.sm },
+  option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+  optionText: { fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  searchLabel: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xl, marginBottom: spacing.sm },
+  message: { fontFamily: fonts.regular, fontSize: 14, color: colors.danger, marginTop: spacing.md },
 });
