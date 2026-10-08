@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
@@ -70,21 +70,23 @@ export default function CustomerHome() {
             <Text style={styles.empty}>No professionals yet. Check back soon.</Text>
           )
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.first_name.charAt(0)}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>
-                {item.first_name} {item.last_name}
-              </Text>
-              <Text style={styles.details}>
-                {professionLabels[item.profession] ?? item.profession}
-                {item.location ? ` · ${item.location}` : ''}
-              </Text>
-            </View>
-          </View>
+                renderItem={({ item }) => (
+          <Link href={{ pathname: '/customer/professional/[id]', params: { id: item.id } }} asChild>
+            <Pressable style={styles.card}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{item.first_name.charAt(0)}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>
+                  {item.first_name} {item.last_name}
+                </Text>
+                <Text style={styles.details}>
+                  {professionLabels[item.profession] ?? item.profession}
+                  {item.location ? ` · ${item.location}` : ''}
+                </Text>
+              </View>
+            </Pressable>
+          </Link>
         )}
         ListFooterComponent={
           <Pressable style={styles.secondaryButton} onPress={handleLogOut}>
