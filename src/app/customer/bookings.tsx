@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { formatPrice } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
@@ -35,8 +35,13 @@ function formatBookingTime(iso: string) {
   return `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()} at ${time}`;
 }
 
+function openDirections(address: string) {
+  Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`);
+}
+
 export default function MyBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [proAddresses, setProAddresses] = useState<Record<number, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,10 +66,29 @@ export default function MyBookings() {
 
     if (loadError) {
       setError(loadError.message);
-    } else {
-      setBookings((data ?? []) as unknown as Booking[]);
+      setLoading(false);
+      return;
     }
 
+    const loaded = (data ?? []) as unknown as Booking[];
+    setBookings(loaded);
+
+    const now = Date.now();
+    const needsAddress = loaded.filter(
+      (b) =>
+        b.status === 'confirmed' &&
+        b.location_type === 'at_professional' &&
+        new Date(b.starts_at).getTime() >= now
+    );
+
+    const results = await Promise.all(
+      needsAddress.map(async (b) => {
+        const { data: addr } = await supabase.rpc('get_booking_address', { p_booking_id: b.id });
+        return [b.id, (addr as string | null) ?? null] as const;
+      })
+    );
+
+    setProAddresses(Object.fromEntries(results));
     setLoading(false);
   }, []);
 
@@ -169,6 +193,8 @@ export default function MyBookings() {
           const isHome = item.location_type === 'at_customer';
           const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
           const answering = answeringId === item.id;
+          const showProAddress = isUpcoming && !isHome && item.status === 'confirmed';
+          const proAddress = proAddresses[item.id];
 
           return (
             <View style={[styles.card, isProposal && isUpcoming && styles.proposalCard]}>
@@ -192,6 +218,24 @@ export default function MyBookings() {
               )}
 
               {isHome && <Text style={styles.details}>At your home: {item.address}</Text>}
+
+              {showProAddress && (
+                <View style={styles.addressBox}>
+                  {proAddress ? (
+                    <>
+                      <Text style={styles.addressLabel}>Where to go</Text>
+                      <Text style={styles.addressText}>{proAddress}</Text>
+                      <Pressable style={styles.directionsButton} onPress={() => openDirections(proAddress)}>
+                        <Text style={styles.directionsText}>Get directions</Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                    <Text style={styles.addressText}>
+                      The address isn't available yet. Message {item.professionals?.first_name ?? 'the professional'} for directions.
+                    </Text>
+                  )}
+                </View>
+              )}
 
               <Text style={styles.price}>
                 {formatPrice(total)}
@@ -239,6 +283,11 @@ const styles = StyleSheet.create({
   details: { fontSize: 14, color: '#666666', marginTop: 4 },
   oldTime: { fontSize: 14, color: '#999999', marginTop: 4, textDecorationLine: 'line-through' },
   newTime: { fontSize: 15, color: '#6a3fb5', fontWeight: '700', marginTop: 4 },
+  addressBox: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, marginTop: 10 },
+  addressLabel: { fontSize: 13, fontWeight: '700', color: '#000000' },
+  addressText: { fontSize: 14, color: '#333333', marginTop: 4 },
+  directionsButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#000000', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 14, marginTop: 10 },
+  directionsText: { fontSize: 14, fontWeight: '600', color: '#000000' },
   price: { fontSize: 15, fontWeight: '600', color: '#000000', marginTop: 8 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionButton: { flex: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1 },
