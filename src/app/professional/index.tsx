@@ -19,8 +19,8 @@ type Service = {
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
-function Tile({ href, icon, label, count }: { href: '/professional/bookings' | '/professional/hours' | '/professional/home-visits'; icon: IconName; label: string; count?: number }) {
-  return (
+function Tile({ href, icon, label, count }: { href: '/professional/bookings' | '/professional/hours' | '/professional/home-visits' | '/professional/profile'; icon: IconName; label: string; count?: number }) {
+return (
     <Link href={href} asChild>
       <Pressable style={styles.tile}>
         <Ionicons name={icon} size={24} color={colors.accentDark} />
@@ -94,6 +94,16 @@ export default function ProfessionalHome() {
         contentContainerStyle={ui.content}
         ListHeaderComponent={
           <>
+                      <Link href="/professional/profile" asChild>
+              <Pressable style={styles.profileRow}>
+                <Ionicons name="person-circle-outline" size={28} color={colors.accentDark} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileTitle}>My profile</Text>
+                  <Text style={styles.profileHint}>Your photo and pictures of your work</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+              </Pressable>
+            </Link>
             <View style={styles.grid}>
               <Tile href="/professional/bookings" icon="calendar-outline" label="Bookings" count={newRequests} />
               <MessagesButton style={styles.messagesTile} />
@@ -177,4 +187,7 @@ const styles = StyleSheet.create({
   price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   logOut: { alignItems: 'center', padding: spacing.lg, marginTop: spacing.lg },
   logOutText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
+    profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  profileTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  profileHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 2 },
 });

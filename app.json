@@ -31,13 +31,21 @@
           "imageWidth": 110
         }
       ],
+            [
+        "expo-image-picker",
+        {
+          "photosPermission": "BeautySlot uses your photos so you can add a profile picture and photos of your work.",
+          "cameraPermission": "BeautySlot uses your camera so you can take a profile picture and photos of your work."
+        }
+      ],
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "BeautySlot uses your location to show beauty professionals near you."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
