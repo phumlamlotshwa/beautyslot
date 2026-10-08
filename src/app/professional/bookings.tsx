@@ -1,16 +1,18 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { ConfirmHomeVisit } from '../../components/confirm-home-visit';
 import { formatPrice } from '../../lib/format';
+import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
-
-type Status = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'reschedule_proposed';
+import { colors, fonts, radius, spacing } from '../../lib/theme';
+import { ui } from '../../lib/ui';
 
 type Booking = {
   id: number;
   starts_at: string;
-  status: Status;
+  status: BookingStatus;
   location_type: 'at_professional' | 'at_customer';
   address: string | null;
   address_lat: number | null;
@@ -19,14 +21,6 @@ type Booking = {
   travel_minutes: number;
   services: { name: string; price: number } | null;
   customers: { first_name: string; last_name: string } | null;
-};
-
-const statusStyles: Record<Status, { label: string; color: string; background: string }> = {
-  pending: { label: 'Pending', color: '#b26a00', background: '#fff4e0' },
-  confirmed: { label: 'Confirmed', color: '#1b7a3d', background: '#e6f6ec' },
-  cancelled: { label: 'Cancelled', color: '#777777', background: '#f0f0f0' },
-  completed: { label: 'Completed', color: '#1f4fa3', background: '#e8eefa' },
-  reschedule_proposed: { label: 'New time sent', color: '#6a3fb5', background: '#f1ebfb' },
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -43,7 +37,20 @@ export default function ProfessionalBookings() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
+  const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
   const [error, setError] = useState<string | null>(null);
+
+  function toggleSection(title: string) {
+    setClosed((current) => {
+      const next = new Set(current);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  }
 
   const loadBookings = useCallback(async () => {
     setError(null);
@@ -78,7 +85,7 @@ export default function ProfessionalBookings() {
     }, [loadBookings])
   );
 
-  async function updateStatus(booking: Booking, status: Status) {
+  async function updateStatus(booking: Booking, status: BookingStatus) {
     setError(null);
     setUpdatingId(booking.id);
 
@@ -107,7 +114,7 @@ export default function ProfessionalBookings() {
 
     if (updateError) {
       if (updateError.code === '23P01') {
-        throw new Error('With that travel buffer, this visit overlaps another booking. Try a shorter buffer, or decline.');
+        throw new Error('With that travel buffer, this visit overlaps another booking. Try a shorter buffer, or suggest a new time.');
       }
       throw new Error(updateError.message);
     }
@@ -136,62 +143,106 @@ export default function ProfessionalBookings() {
   }
 
   const now = Date.now();
-  const isUpcoming = (b: Booking) => new Date(b.starts_at).getTime() >= now;
+  const isFuture = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
-  const waiting = bookings.filter((b) => b.status === 'pending' && isUpcoming(b));
-    const upcoming = bookings.filter(
-    (b) => (b.status === 'confirmed' || b.status === 'reschedule_proposed') && isUpcoming(b)
-  );
-  const past = bookings.filter((b) => !waiting.includes(b) && !upcoming.includes(b)).reverse();
-  
+  const newRequests = bookings.filter((b) => b.status === 'pending' && isFuture(b));
+  const confirmed = bookings.filter((b) => b.status === 'confirmed' && isFuture(b));
+  const waiting = bookings.filter((b) => b.status === 'reschedule_proposed' && isFuture(b));
+  const cancelled = bookings.filter((b) => b.status === 'cancelled').reverse();
+  const history = bookings
+    .filter(
+      (b) =>
+        b.status !== 'cancelled' &&
+        !newRequests.includes(b) &&
+        !confirmed.includes(b) &&
+        !waiting.includes(b)
+    )
+    .reverse();
+
+  const sections = [
+    { title: 'New', items: newRequests },
+    { title: 'Confirmed', items: confirmed },
+    { title: 'Pending', items: waiting },
+    { title: 'Cancelled', items: cancelled },
+    { title: 'History', items: history },
+  ]
+    .filter((s) => s.items.length > 0)
+    .map((s) => ({
+      title: s.title,
+      count: s.items.length,
+      isOpen: !closed.has(s.title),
+      data: closed.has(s.title) ? [] : s.items,
+    }));
 
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={ui.screen}>
       <SectionList
-        sections={[
-          { title: 'Waiting for you', data: waiting, empty: 'No new requests.' },
-          { title: 'Upcoming', data: upcoming, empty: 'No confirmed bookings coming up.' },
-          { title: 'Past and cancelled', data: past, empty: 'Nothing here yet.' },
-        ]}
+        sections={sections}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={ui.content}
         stickySectionHeadersEnabled={false}
-        ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
-        renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
-        renderSectionFooter={({ section }) =>
-          section.data.length === 0 ? <Text style={styles.empty}>{section.empty}</Text> : null
+        ListHeaderComponent={error ? <Text style={ui.error}>{error}</Text> : null}
+        ListEmptyComponent={
+          <View style={styles.emptyBox}>
+            <Ionicons name="calendar-outline" size={40} color={colors.textFaint} />
+            <Text style={styles.emptyTitle}>No bookings yet</Text>
+            <Text style={styles.emptyText}>When customers book you, their requests will show up here.</Text>
+          </View>
         }
-        renderItem={({ item, section }) => {
-          const status = statusStyles[item.status];
+        renderSectionHeader={({ section }) => (
+          <Pressable style={styles.sectionHeader} onPress={() => toggleSection(section.title)}>
+            <Text style={styles.sectionTitle}>
+              {section.title} <Text style={styles.sectionCount}>({section.count})</Text>
+            </Text>
+            <Ionicons name={section.isOpen ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
+          </Pressable>
+        )}
+        renderItem={({ item }) => {
+          const status = statusStyle(item.status, 'professional');
+          const future = isFuture(item);
           const busy = updatingId === item.id;
           const isHome = item.location_type === 'at_customer';
-          const canComplete = section.title === 'Past and cancelled' && item.status === 'confirmed';
           const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
+          const isNew = item.status === 'pending' && future;
+          const canMove = future && (item.status === 'pending' || item.status === 'confirmed' || item.status === 'reschedule_proposed');
+          const canCancel = future && (item.status === 'confirmed' || item.status === 'reschedule_proposed');
+          const canComplete = !future && item.status === 'confirmed';
+          const faded = item.status === 'cancelled' || !future;
 
           return (
-            <View style={styles.card}>
+            <View style={[styles.card, faded && styles.fadedCard]}>
               <View style={styles.cardTop}>
                 <Text style={styles.serviceName}>{item.services?.name ?? 'Service'}</Text>
                 <View style={[styles.badge, { backgroundColor: status.background }]}>
                   <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
                 </View>
               </View>
-              <Text style={styles.details}>
-                {item.customers?.first_name} {item.customers?.last_name}
-              </Text>
-              <Text style={styles.details}>{formatBookingTime(item.starts_at)}</Text>
+
+              <View style={styles.line}>
+                <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+                <Text style={styles.lineText}>
+                  {item.customers?.first_name} {item.customers?.last_name}
+                </Text>
+              </View>
+              <View style={styles.line}>
+                <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
+                <Text style={styles.lineText}>{formatBookingTime(item.starts_at)}</Text>
+              </View>
 
               {isHome && (
                 <View style={styles.homeBox}>
-                  <Text style={styles.homeTitle}>Home visit</Text>
+                  <View style={styles.homeTitleRow}>
+                    <Ionicons name="home-outline" size={15} color={colors.accentDark} />
+                    <Text style={styles.homeTitle}>Home visit</Text>
+                  </View>
                   <Text style={styles.homeAddress}>{item.address}</Text>
                   {item.travel_minutes > 0 && (
                     <Text style={styles.homeDetail}>Travel buffer: {item.travel_minutes} min each way</Text>
@@ -199,21 +250,20 @@ export default function ProfessionalBookings() {
                 </View>
               )}
 
-              <Text style={styles.price}>
-                {formatPrice(total)}
-                {isHome && Number(item.call_out_fee) > 0 ? ` (incl. ${formatPrice(item.call_out_fee)} call-out)` : ''}
-              </Text>
-
-              {busy && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
-                            {!busy && (section.title === 'Waiting for you' || section.title === 'Upcoming') && (
-                <Link href={{ pathname: '/professional/reschedule/[bookingId]', params: { bookingId: String(item.id) } }} asChild>
-                  <Pressable style={styles.suggestButton}>
-                    <Text style={styles.outlineText}>Suggest a new time</Text>
-                  </Pressable>
-                </Link>
+              {item.status === 'reschedule_proposed' && future && (
+                <Text style={styles.waitingText}>Waiting for the customer to accept this new time.</Text>
               )}
 
-              {!busy && section.title === 'Waiting for you' && (
+              <View style={styles.priceRow}>
+                <Text style={styles.price}>{formatPrice(total)}</Text>
+                {isHome && Number(item.call_out_fee) > 0 && (
+                  <Text style={styles.priceNote}>incl. {formatPrice(item.call_out_fee)} call-out</Text>
+                )}
+              </View>
+
+              {busy && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
+
+              {!busy && isNew && (
                 <View style={styles.actions}>
                   <Pressable style={[styles.actionButton, styles.primary]} onPress={() => handleConfirm(item)}>
                     <Text style={styles.primaryText}>Confirm</Text>
@@ -224,15 +274,27 @@ export default function ProfessionalBookings() {
                 </View>
               )}
 
-              {!busy && section.title === 'Upcoming' && (
-                <Pressable style={[styles.actionButton, styles.danger, { marginTop: 12 }]} onPress={() => confirmCancel(item, 'Cancel booking')}>
-                  <Text style={styles.dangerText}>Cancel booking</Text>
+              {!busy && canMove && (
+                <Link href={{ pathname: '/professional/reschedule/[bookingId]', params: { bookingId: String(item.id) } }} asChild>
+                  <Pressable style={styles.moveButton}>
+                    <Ionicons name="time-outline" size={16} color={colors.accentDark} />
+                    <Text style={styles.moveText}>
+                      {item.status === 'reschedule_proposed' ? 'Suggest a different time' : 'Suggest a new time'}
+                    </Text>
+                  </Pressable>
+                </Link>
+              )}
+
+              {!busy && canCancel && (
+                <Pressable style={styles.cancelLink} onPress={() => confirmCancel(item, 'Cancel booking')}>
+                  <Text style={styles.cancelText}>Cancel booking</Text>
                 </Pressable>
               )}
 
               {!busy && canComplete && (
-                <Pressable style={[styles.actionButton, styles.outline, { marginTop: 12 }]} onPress={() => updateStatus(item, 'completed')}>
-                  <Text style={styles.outlineText}>Mark as completed</Text>
+                <Pressable style={styles.moveButton} onPress={() => updateStatus(item, 'completed')}>
+                  <Ionicons name="checkmark-done-outline" size={16} color={colors.accentDark} />
+                  <Text style={styles.moveText}>Mark as completed</Text>
                 </Pressable>
               )}
             </View>
@@ -254,29 +316,37 @@ export default function ProfessionalBookings() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  error: { color: '#c62828', marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#000000', marginTop: 8, marginBottom: 12 },
-  empty: { fontSize: 15, color: '#666666', marginBottom: 24 },
-  card: { borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16, marginBottom: 12 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  serviceName: { flex: 1, fontSize: 16, fontWeight: '600', color: '#000000' },
-  badge: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 },
-  badgeText: { fontSize: 12, fontWeight: '600' },
-  details: { fontSize: 14, color: '#666666', marginTop: 4 },
-  homeBox: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12, marginTop: 10 },
-  homeTitle: { fontSize: 13, fontWeight: '700', color: '#000000' },
-  homeAddress: { fontSize: 14, color: '#333333', marginTop: 4 },
-  homeDetail: { fontSize: 13, color: '#666666', marginTop: 4 },
-  price: { fontSize: 15, fontWeight: '600', color: '#000000', marginTop: 10 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  actionButton: { flex: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1 },
-  primary: { backgroundColor: '#000000', borderColor: '#000000' },
-  primaryText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
-  danger: { borderColor: '#c62828' },
-  dangerText: { color: '#c62828', fontSize: 15, fontWeight: '600' },
-  outline: { borderColor: '#000000' },
-  outlineText: { color: '#000000', fontSize: 15, fontWeight: '600' },
-    suggestButton: { borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#000000', marginTop: 12 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
+  sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
+  sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
+  emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
+  emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
+  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginBottom: spacing.md },
+  fadedCard: { opacity: 0.75 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
+  serviceName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
+  badgeText: { fontFamily: fonts.medium, fontSize: 12 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
+  lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
+  homeBox: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  homeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  homeTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.accentDark },
+  homeAddress: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, marginTop: 4 },
+  homeDetail: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  waitingText: { fontFamily: fonts.medium, fontSize: 14, color: colors.info, marginTop: spacing.md },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md },
+  price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  priceNote: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  actionButton: { flex: 1, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center', borderWidth: 1 },
+  primary: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
+  primaryText: { fontFamily: fonts.medium, fontSize: 15, color: colors.onAccent },
+  danger: { borderColor: colors.danger, backgroundColor: colors.surface },
+  dangerText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
+  moveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.accentDark, borderRadius: radius.sm, paddingVertical: 10, marginTop: spacing.md },
+  moveText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
+  cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
+  cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
 });
