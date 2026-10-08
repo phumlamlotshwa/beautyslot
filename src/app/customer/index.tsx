@@ -1,6 +1,7 @@
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MessagesButton } from '../../components/messages-button';
 import { professionLabels } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
@@ -66,11 +67,13 @@ export default function CustomerHome() {
         ListHeaderComponent={
           <>
             <Text style={styles.title}>Find a professional</Text>
-                        <Link href="/customer/bookings" asChild>
-              <Pressable style={styles.outlineButton}>
-                <Text style={styles.outlineButtonText}>My bookings</Text>
+            <Link href="/customer/bookings" asChild>
+            <Pressable style={styles.outlineButton}>
+            <Text style={styles.outlineButtonText}>My bookings</Text>
               </Pressable>
             </Link>
+            <MessagesButton />
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
               {filters.map((f) => (
                 <Pressable

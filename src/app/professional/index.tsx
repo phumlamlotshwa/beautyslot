@@ -1,6 +1,7 @@
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { MessagesButton } from '../../components/messages-button';
 import { formatDuration, formatPrice } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
@@ -62,11 +63,12 @@ export default function ProfessionalHome() {
         ListHeaderComponent={
           <>
             <Text style={styles.title}>My services</Text>
-                        <Link href="/professional/bookings" asChild>
+              <Link href="/professional/bookings" asChild>
               <Pressable style={styles.outlineButton}>
                 <Text style={styles.secondaryButtonText}>Bookings</Text>
               </Pressable>
             </Link>
+            <MessagesButton />
             <Link href="/professional/hours" asChild>
               <Pressable style={styles.outlineButton}>
                 <Text style={styles.secondaryButtonText}>Set working hours</Text>

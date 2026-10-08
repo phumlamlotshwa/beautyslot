@@ -32,3 +32,15 @@ export async function getOrCreateConversation(professionalId: string): Promise<n
 
   return created.id;
 }
+export async function getUnreadCount(): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { count } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .is('read_at', null)
+    .neq('sender_id', user.id);
+
+  return count ?? 0;
+}
