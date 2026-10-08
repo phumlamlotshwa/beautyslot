@@ -15,13 +15,18 @@ type Service = {
   duration_minutes: number;
   professional_id: string;
   offered_at: OfferedAt;
-  professionals: { call_out_fee: number } | null;
 };
 
 type Hours = {
   day_of_week: number;
   start_time: string;
   end_time: string;
+};
+
+type Quote = {
+  fee: number;
+  km: number;
+  in_range: boolean;
 };
 
 type LocationType = 'at_professional' | 'at_customer';
@@ -45,6 +50,9 @@ export default function BookService() {
   const [address, setAddress] = useState<Place | null>(null);
   const [savedAddress, setSavedAddress] = useState<Place | null>(null);
   const [saveAddress, setSaveAddress] = useState(true);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [monthBusy, setMonthBusy] = useState<BusyTime[]>([]);
   const [availableDays, setAvailableDays] = useState<Set<string>>(new Set());
@@ -61,7 +69,7 @@ export default function BookService() {
     async function loadService() {
       const { data: serviceData, error: serviceError } = await supabase
         .from('services')
-        .select('id, name, price, duration_minutes, professional_id, offered_at, professionals(call_out_fee)')
+        .select('id, name, price, duration_minutes, professional_id, offered_at')
         .eq('id', serviceId)
         .single();
 
@@ -108,6 +116,43 @@ export default function BookService() {
 
     loadService();
   }, [serviceId]);
+
+  useEffect(() => {
+    if (!service || locationType !== 'at_customer' || !address) {
+      setQuote(null);
+      setQuoteError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    setQuoting(true);
+    setQuoteError(null);
+
+    supabase
+      .rpc('quote_call_out_fee', {
+        p_professional_id: service.professional_id,
+        p_lat: address.lat,
+        p_lng: address.lng,
+      })
+      .then(({ data, error: quoteErr }) => {
+        if (cancelled) return;
+        setQuoting(false);
+
+        if (quoteErr) {
+          setQuote(null);
+          setQuoteError(quoteErr.message);
+          return;
+        }
+
+        const row = Array.isArray(data) ? data[0] : data;
+        setQuote(row ? { fee: Number(row.fee), km: row.km, in_range: row.in_range } : null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [service, locationType, address?.lat, address?.lng]);
 
   useEffect(() => {
     if (!service) return;
@@ -200,9 +245,10 @@ export default function BookService() {
   }
 
   const isHome = locationType === 'at_customer';
-  const callOutFee = isHome ? Number(service?.professionals?.call_out_fee ?? 0) : 0;
+  const callOutFee = isHome ? Number(quote?.fee ?? 0) : 0;
   const total = Number(service?.price ?? 0) + callOutFee;
   const addressIsNew = !!address && address.address !== savedAddress?.address;
+  const canConfirm = !isHome || (!!address && !!quote && quote.in_range && !quoting);
 
   async function handleConfirm() {
     if (!service || !selectedSlot) return;
@@ -237,7 +283,6 @@ export default function BookService() {
       address: isHome ? address!.address : null,
       address_lat: isHome ? address!.lat : null,
       address_lng: isHome ? address!.lng : null,
-      call_out_fee: callOutFee,
     });
 
     if (bookingError) {
@@ -337,9 +382,19 @@ export default function BookService() {
                 />
               </View>
             )}
-            {callOutFee > 0 && (
-              <Text style={styles.help}>A call-out fee of {formatPrice(callOutFee)} applies to home visits.</Text>
+
+            {quoting && <ActivityIndicator style={{ marginTop: 12 }} color="#000000" />}
+            {!quoting && quote && quote.in_range && (
+              <Text style={styles.quote}>
+                Call-out fee for your address: {formatPrice(quote.fee)} (about {quote.km} km)
+              </Text>
             )}
+            {!quoting && quote && !quote.in_range && (
+              <Text style={styles.error}>
+                Your address is about {quote.km} km away, outside the area this professional travels to.
+              </Text>
+            )}
+            {!quoting && quoteError && <Text style={styles.error}>{quoteError}</Text>}
           </>
         )}
 
@@ -407,18 +462,18 @@ export default function BookService() {
             {isHome && (
               <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>Call-out fee</Text>
-                <Text style={styles.priceValue}>{formatPrice(callOutFee)}</Text>
+                <Text style={styles.priceValue}>{quote ? formatPrice(callOutFee) : '–'}</Text>
               </View>
             )}
             <View style={[styles.priceRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{formatPrice(total)}</Text>
+              <Text style={styles.totalValue}>{!isHome || quote ? formatPrice(total) : '–'}</Text>
             </View>
 
             <Pressable
-              style={[styles.button, confirming && styles.buttonDisabled]}
+              style={[styles.button, (confirming || !canConfirm) && styles.buttonDisabled]}
               onPress={handleConfirm}
-              disabled={confirming}
+              disabled={confirming || !canConfirm}
             >
               {confirming ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Confirm booking</Text>}
             </Pressable>
@@ -441,7 +496,7 @@ const styles = StyleSheet.create({
   choiceText: { color: '#000000' },
   saveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   saveText: { fontSize: 15, color: '#000000' },
-  help: { fontSize: 14, color: '#666666', marginTop: 8 },
+  quote: { fontSize: 15, color: '#1b7a3d', fontWeight: '600', marginTop: 12 },
   hint: { fontSize: 13, color: '#999999', textAlign: 'center', marginTop: 8 },
   chipSelected: { backgroundColor: '#000000', borderColor: '#000000' },
   textSelected: { color: '#ffffff' },
@@ -459,7 +514,7 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 16, fontWeight: '700', color: '#000000' },
   totalValue: { fontSize: 16, fontWeight: '700', color: '#000000' },
   button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 16 },
-  buttonDisabled: { opacity: 0.6 },
+  buttonDisabled: { opacity: 0.4 },
   buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  error: { color: '#c62828', marginTop: 16 },
+  error: { color: '#c62828', marginTop: 12 },
 });
