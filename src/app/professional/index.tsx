@@ -62,6 +62,11 @@ export default function ProfessionalHome() {
         ListHeaderComponent={
           <>
             <Text style={styles.title}>My services</Text>
+                        <Link href="/professional/bookings" asChild>
+              <Pressable style={styles.outlineButton}>
+                <Text style={styles.secondaryButtonText}>Bookings</Text>
+              </Pressable>
+            </Link>
             <Link href="/professional/hours" asChild>
               <Pressable style={styles.outlineButton}>
                 <Text style={styles.secondaryButtonText}>Set working hours</Text>

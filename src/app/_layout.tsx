@@ -23,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="professional/hours" options={{ title: 'Working hours' }} />
         <Stack.Screen name="customer/book/[serviceId]" options={{ title: 'Book' }} />
         <Stack.Screen name="customer/bookings" options={{ title: 'My bookings' }} />
+        <Stack.Screen name="professional/bookings" options={{ title: 'Bookings' }} />
       </Stack>
     </ThemeProvider>
   );
