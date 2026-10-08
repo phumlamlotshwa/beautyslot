@@ -1,7 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { colors, fonts, radius, spacing } from '../lib/theme';
+import { ui } from '../lib/ui';
 
 type Person = { first_name: string; last_name: string } | null;
 
@@ -89,20 +92,26 @@ export default function Messages() {
 
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={ui.screen}>
       <FlatList
         data={conversations}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
-        ListEmptyComponent={<Text style={styles.empty}>No messages yet.</Text>}
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={error ? <Text style={[ui.error, { paddingHorizontal: spacing.lg }]}>{error}</Text> : null}
+        ListEmptyComponent={
+          <View style={styles.emptyBox}>
+            <Ionicons name="chatbubbles-outline" size={40} color={colors.textFaint} />
+            <Text style={styles.emptyTitle}>No messages yet</Text>
+            <Text style={styles.emptyText}>Your conversations will show up here.</Text>
+          </View>
+        }
         renderItem={({ item }) => {
           const iAmCustomer = item.customer_id === myId;
           const other = iAmCustomer ? item.professionals : item.customers;
@@ -116,18 +125,20 @@ export default function Messages() {
           return (
             <Link href={{ pathname: '/chat/[conversationId]', params: { conversationId: String(item.id) } }} asChild>
               <Pressable style={styles.row}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{name.charAt(0)}</Text>
+                <View style={ui.avatar}>
+                  <Text style={ui.avatarText}>{name.charAt(0)}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.rowTop}>
-                    <Text style={[styles.name, unread > 0 && styles.bold]} numberOfLines={1}>
+                    <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>
                       {name}
                     </Text>
-                    <Text style={styles.when}>{formatWhen(last?.created_at ?? item.last_message_at)}</Text>
+                    <Text style={[styles.when, unread > 0 && styles.whenUnread]}>
+                      {formatWhen(last?.created_at ?? item.last_message_at)}
+                    </Text>
                   </View>
                   <View style={styles.rowBottom}>
-                    <Text style={[styles.preview, unread > 0 && styles.unreadPreview]} numberOfLines={1}>
+                    <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>
                       {preview}
                     </Text>
                     {unread > 0 && (
@@ -147,20 +158,19 @@ export default function Messages() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { paddingVertical: 8, flexGrow: 1 },
-  error: { color: '#c62828', padding: 16 },
-  empty: { fontSize: 16, color: '#666666', textAlign: 'center', marginTop: 48 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarText: { color: '#ffffff', fontSize: 20, fontWeight: '700' },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4 },
-  name: { flex: 1, fontSize: 16, color: '#000000' },
-  bold: { fontWeight: '700' },
-  when: { fontSize: 12, color: '#888888' },
-  preview: { flex: 1, fontSize: 14, color: '#666666' },
-  unreadPreview: { color: '#000000', fontWeight: '600' },
-  badge: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  badgeText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  list: { paddingVertical: spacing.sm, flexGrow: 1 },
+  emptyBox: { alignItems: 'center', marginTop: 80, paddingHorizontal: spacing.xl },
+  emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
+  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginTop: spacing.xs },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
+  rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
+  name: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  nameUnread: { fontFamily: fonts.bold },
+  when: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint },
+  whenUnread: { fontFamily: fonts.medium, color: colors.accentDark },
+  preview: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
+  previewUnread: { fontFamily: fonts.medium, color: colors.text },
+  badge: { minWidth: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  badgeText: { fontFamily: fonts.bold, fontSize: 12, color: colors.onAccent },
 });

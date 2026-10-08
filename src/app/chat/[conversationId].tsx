@@ -1,7 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { colors, fonts, radius, spacing } from '../../lib/theme';
+import { ui } from '../../lib/ui';
 
 type Message = {
   id: number;
@@ -126,17 +129,19 @@ export default function Chat() {
     setMessages((current) => (current.some((m) => m.id === data.id) ? current : [...current, data]));
   }
 
+  const canSend = !!text.trim() && !sending;
+
   return (
     <KeyboardAvoidingView
-      style={styles.screen}
+      style={ui.screen}
       behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
       <Stack.Screen options={{ title: otherName }} />
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#000000" />
+        <View style={ui.centered}>
+          <ActivityIndicator size="large" color={colors.accentDark} />
         </View>
       ) : (
         <FlatList
@@ -145,7 +150,10 @@ export default function Chat() {
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={styles.empty}>No messages yet. Say hello!</Text>
+            <View style={styles.emptyBox}>
+              <Ionicons name="chatbubble-ellipses-outline" size={36} color={colors.textFaint} />
+              <Text style={styles.emptyText}>No messages yet. Say hello!</Text>
+            </View>
           }
           renderItem={({ item }) => {
             const mine = item.sender_id === myId;
@@ -159,7 +167,7 @@ export default function Chat() {
         />
       )}
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={[ui.error, { paddingHorizontal: spacing.lg }]}>{error}</Text>}
 
       <View style={styles.inputRow}>
         <TextInput
@@ -167,16 +175,17 @@ export default function Chat() {
           value={text}
           onChangeText={setText}
           placeholder="Type a message"
-          placeholderTextColor="#999999"
+          placeholderTextColor={colors.textFaint}
           multiline
           maxLength={2000}
         />
         <Pressable
-          style={[styles.sendButton, (!text.trim() || sending) && styles.sendDisabled]}
+          style={[styles.sendButton, !canSend && styles.sendDisabled]}
           onPress={handleSend}
-          disabled={!text.trim() || sending}
+          disabled={!canSend}
+          accessibilityLabel="Send message"
         >
-          {sending ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.sendText}>Send</Text>}
+          {sending ? <ActivityIndicator color={colors.onAccent} /> : <Ionicons name="send" size={18} color={colors.onAccent} />}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -184,21 +193,18 @@ export default function Chat() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { padding: 16, flexGrow: 1 },
-  empty: { fontSize: 15, color: '#666666', textAlign: 'center', marginTop: 24, transform: [{ scaleY: -1 }] },
-  bubble: { maxWidth: '80%', borderRadius: 16, paddingVertical: 8, paddingHorizontal: 12, marginVertical: 4 },
-  mine: { alignSelf: 'flex-end', backgroundColor: '#000000', borderBottomRightRadius: 4 },
-  theirs: { alignSelf: 'flex-start', backgroundColor: '#f0f0f0', borderBottomLeftRadius: 4 },
-  body: { fontSize: 16, color: '#000000' },
-  mineText: { color: '#ffffff' },
-  time: { fontSize: 11, color: '#888888', marginTop: 4, alignSelf: 'flex-end' },
-  mineTime: { color: '#bbbbbb' },
-  error: { color: '#c62828', paddingHorizontal: 16, paddingBottom: 8 },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: '#eeeeee' },
-  input: { flex: 1, maxHeight: 120, borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, color: '#000000' },
-  sendButton: { backgroundColor: '#000000', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 12 },
+  list: { padding: spacing.lg, flexGrow: 1 },
+  emptyBox: { alignItems: 'center', marginTop: spacing.xl, transform: [{ scaleY: -1 }] },
+  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginTop: spacing.sm },
+  bubble: { maxWidth: '80%', borderRadius: radius.lg, paddingVertical: spacing.sm, paddingHorizontal: 14, marginVertical: 3 },
+  mine: { alignSelf: 'flex-end', backgroundColor: colors.accentDark, borderBottomRightRadius: 4 },
+  theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
+  body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 22, color: colors.text },
+  mineText: { color: colors.onAccent },
+  time: { fontFamily: fonts.regular, fontSize: 11, color: colors.textFaint, marginTop: 2, alignSelf: 'flex-end' },
+  mineTime: { color: 'rgba(255, 255, 255, 0.7)' },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
+  input: { flex: 1, maxHeight: 120, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 22, paddingHorizontal: spacing.lg, paddingVertical: 10, fontFamily: fonts.regular, fontSize: 16, color: colors.text },
+  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center' },
   sendDisabled: { opacity: 0.4 },
-  sendText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
 });
