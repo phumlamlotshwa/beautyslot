@@ -1,5 +1,6 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 type Role = 'customer' | 'professional';
@@ -69,7 +70,8 @@ export default function SignUp() {
       return;
     }
 
-    Alert.alert('Welcome to BeautySlot', 'Your account has been created.');
+        router.replace(role === 'customer' ? '/customer' : '/professional');
+
   }
 
   return (

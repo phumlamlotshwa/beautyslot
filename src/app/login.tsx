@@ -1,5 +1,7 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { getRole } from '../lib/get-role';
 import { supabase } from '../lib/supabase';
 
 export default function LogIn() {
@@ -18,19 +20,28 @@ export default function LogIn() {
 
     setLoading(true);
 
-    const { error: logInError } = await supabase.auth.signInWithPassword({
+    const { data, error: logInError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
 
-    setLoading(false);
-
-    if (logInError) {
-      setError(logInError.message);
+    if (logInError || !data.user) {
+      setError(logInError?.message ?? 'Something went wrong. Please try again.');
+      setLoading(false);
       return;
     }
 
-    Alert.alert('Welcome back', 'You are logged in.');
+    const role = await getRole(data.user.id);
+
+    setLoading(false);
+
+    if (!role) {
+      await supabase.auth.signOut();
+      setError("We couldn't find your profile. Please sign up again or contact support.");
+      return;
+    }
+
+    router.replace(role === 'customer' ? '/customer' : '/professional');
   }
 
   return (

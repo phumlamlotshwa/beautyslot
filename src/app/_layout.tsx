@@ -14,7 +14,9 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="sign-up" options={{ title: 'Sign up' }} />
-                <Stack.Screen name="login" options={{ title: 'Log in' }} />
+        <Stack.Screen name="login" options={{ title: 'Log in' }} />
+        <Stack.Screen name="customer/index" options={{ title: 'BeautySlot' }} />
+        <Stack.Screen name="professional/index" options={{ title: 'BeautySlot' }} />
       </Stack>
     </ThemeProvider>
   );
