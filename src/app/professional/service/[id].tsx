@@ -1,20 +1,18 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { OfferedAt, offeredAtOptions } from '../../../lib/format';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ServiceForm, ServiceValues } from '../../../components/service-form';
+import { OfferedAt } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
-
-const categories = ['Hair', 'Braids', 'Barbering', 'Nails', 'Makeup'];
+import { colors, fonts, spacing } from '../../../lib/theme';
+import { ui } from '../../../lib/ui';
 
 export default function EditService() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
-  const [offeredAt, setOfferedAt] = useState<OfferedAt>('at_professional');
-  const [price, setPrice] = useState('');
-  const [duration, setDuration] = useState('');
+  const [initial, setInitial] = useState<ServiceValues | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,11 +26,13 @@ export default function EditService() {
       if (loadError || !data) {
         setError(loadError?.message ?? 'Service not found.');
       } else {
-        setName(data.name);
-        setCategory(data.category);
-        setOfferedAt(data.offered_at as OfferedAt);
-        setPrice(String(data.price));
-        setDuration(String(data.duration_minutes));
+        setInitial({
+          name: data.name,
+          category: data.category,
+          offeredAt: data.offered_at as OfferedAt,
+          price: Number(data.price),
+          durationMinutes: data.duration_minutes,
+        });
       }
 
       setLoading(false);
@@ -41,50 +41,25 @@ export default function EditService() {
     loadService();
   }, [id]);
 
-  async function handleSave() {
-    setError(null);
-
-    const priceNumber = Number(price.replace(',', '.'));
-    const durationNumber = Number(duration);
-
-    if (!name.trim() || !category || !price || !duration) {
-      setError('Please fill in all the fields.');
-      return;
-    }
-    if (isNaN(priceNumber) || priceNumber < 0) {
-      setError('Please enter a valid price.');
-      return;
-    }
-    if (!Number.isInteger(durationNumber) || durationNumber <= 0) {
-      setError('Please enter the duration in whole minutes, like 60.');
-      return;
-    }
-
-    setSaving(true);
-
+  async function handleSave(values: ServiceValues) {
     const { error: saveError } = await supabase
       .from('services')
       .update({
-        name: name.trim(),
-        category,
-        offered_at: offeredAt,
-        price: priceNumber,
-        duration_minutes: durationNumber,
+        name: values.name,
+        category: values.category,
+        offered_at: values.offeredAt,
+        price: values.price,
+        duration_minutes: values.durationMinutes,
       })
       .eq('id', id);
 
-    setSaving(false);
-
-    if (saveError) {
-      setError(saveError.message);
-      return;
-    }
+    if (saveError) throw new Error(saveError.message);
 
     router.back();
   }
 
   function handleDelete() {
-    Alert.alert('Delete service', `Are you sure you want to delete "${name}"?`, [
+    Alert.alert('Delete service', `Are you sure you want to delete "${initial?.name}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: deleteService },
     ]);
@@ -92,11 +67,11 @@ export default function EditService() {
 
   async function deleteService() {
     setError(null);
-    setSaving(true);
+    setDeleting(true);
 
     const { error: deleteError } = await supabase.from('services').delete().eq('id', id);
 
-    setSaving(false);
+    setDeleting(false);
 
     if (deleteError) {
       setError(
@@ -112,88 +87,38 @@ export default function EditService() {
 
   if (loading) {
     return (
-      <View style={[styles.screen, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#000000" />
+      <View style={ui.centered}>
+        <ActivityIndicator size="large" color={colors.accentDark} />
+      </View>
+    );
+  }
+
+  if (!initial) {
+    return (
+      <View style={[ui.screen, ui.content]}>
+        <Text style={ui.error}>{error}</Text>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>Service name</Text>
-        <TextInput style={styles.input} value={name} onChangeText={setName} />
-
-        <Text style={styles.label}>Category</Text>
-        <View style={styles.wrap}>
-          {categories.map((c) => (
-            <Pressable
-              key={c}
-              style={[styles.choice, category === c && styles.choiceSelected]}
-              onPress={() => setCategory(c)}
-            >
-              <Text style={[styles.choiceText, category === c && styles.choiceTextSelected]}>{c}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={styles.label}>Where do you offer it?</Text>
-        <View style={styles.wrap}>
-          {offeredAtOptions.map((o) => (
-            <Pressable
-              key={o.value}
-              style={[styles.choice, offeredAt === o.value && styles.choiceSelected]}
-              onPress={() => setOfferedAt(o.value)}
-            >
-              <Text style={[styles.choiceText, offeredAt === o.value && styles.choiceTextSelected]}>{o.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {offeredAt !== 'at_professional' && (
-          <Text style={styles.help}>
-            Make sure your address and call-out fee are set under Home visits.
-          </Text>
+    <ServiceForm initial={initial} submitLabel="Save changes" onSubmit={handleSave}>
+      {error && <Text style={ui.error}>{error}</Text>}
+      <Pressable style={styles.deleteButton} onPress={handleDelete} disabled={deleting}>
+        {deleting ? (
+          <ActivityIndicator color={colors.danger} />
+        ) : (
+          <>
+            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+            <Text style={styles.deleteText}>Delete service</Text>
+          </>
         )}
-
-        <Text style={styles.label}>Price (R)</Text>
-        <TextInput style={styles.input} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
-
-        <Text style={styles.label}>Duration (minutes)</Text>
-        <TextInput style={styles.input} value={duration} onChangeText={setDuration} keyboardType="number-pad" />
-
-        {error && <Text style={styles.error}>{error}</Text>}
-
-        <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Save changes</Text>}
-        </Pressable>
-
-        <Pressable style={styles.deleteButton} onPress={handleDelete} disabled={saving}>
-          <Text style={styles.deleteButtonText}>Delete service</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </Pressable>
+    </ServiceForm>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#ffffff' },
-  content: { padding: 24, paddingBottom: 48 },
-  label: { fontSize: 14, color: '#333333', marginTop: 16, marginBottom: 6 },
-  help: { fontSize: 13, color: '#666666', marginTop: 8 },
-  input: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 8, padding: 12, fontSize: 16, color: '#000000' },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  choice: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  choiceSelected: { backgroundColor: '#000000', borderColor: '#000000' },
-  choiceText: { color: '#000000' },
-  choiceTextSelected: { color: '#ffffff' },
-  error: { color: '#c62828', marginTop: 16 },
-  button: { backgroundColor: '#000000', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 24 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  deleteButton: { borderWidth: 1, borderColor: '#c62828', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 12 },
-  deleteButtonText: { color: '#c62828', fontSize: 16, fontWeight: '600' },
+  deleteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.lg, marginTop: spacing.md },
+  deleteText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
 });
