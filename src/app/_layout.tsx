@@ -17,7 +17,8 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ title: 'Log in' }} />
         <Stack.Screen name="customer/index" options={{ title: 'BeautySlot' }} />
         <Stack.Screen name="professional/index" options={{ title: 'BeautySlot' }} />
-                <Stack.Screen name="professional/add-service" options={{ title: 'Add service' }} />
+        <Stack.Screen name="professional/add-service" options={{ title: 'Add service' }} />
+        <Stack.Screen name="professional/service/[id]" options={{ title: 'Edit service' }} />
       </Stack>
     </ThemeProvider>
   );
