@@ -1,6 +1,7 @@
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { professionLabels } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 
 type Professional = {
@@ -11,15 +12,17 @@ type Professional = {
   location: string | null;
 };
 
-const professionLabels: Record<string, string> = {
-  barber: 'Barber',
-  hairdresser: 'Hairdresser',
-  makeup_artist: 'Makeup artist',
-  nail_artist: 'Nail artist',
-};
+const filters = [
+  { value: 'all', label: 'All' },
+  { value: 'barber', label: 'Barber' },
+  { value: 'hairdresser', label: 'Hairdresser' },
+  { value: 'makeup_artist', label: 'Makeup artist' },
+  { value: 'nail_artist', label: 'Nail artist' },
+];
 
 export default function CustomerHome() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +49,9 @@ export default function CustomerHome() {
     }, [])
   );
 
+  const shownProfessionals =
+    filter === 'all' ? professionals : professionals.filter((p) => p.profession === filter);
+
   async function handleLogOut() {
     await supabase.auth.signOut();
     router.replace('/');
@@ -54,12 +60,23 @@ export default function CustomerHome() {
   return (
     <View style={styles.screen}>
       <FlatList
-        data={professionals}
+        data={shownProfessionals}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <>
             <Text style={styles.title}>Find a professional</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+              {filters.map((f) => (
+                <Pressable
+                  key={f.value}
+                  style={[styles.chip, filter === f.value && styles.chipSelected]}
+                  onPress={() => setFilter(f.value)}
+                >
+                  <Text style={[styles.chipText, filter === f.value && styles.chipTextSelected]}>{f.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
             {error && <Text style={styles.error}>{error}</Text>}
           </>
         }
@@ -67,10 +84,14 @@ export default function CustomerHome() {
           loading ? (
             <ActivityIndicator style={{ marginTop: 32 }} color="#000000" />
           ) : (
-            <Text style={styles.empty}>No professionals yet. Check back soon.</Text>
+            <Text style={styles.empty}>
+              {filter === 'all'
+                ? 'No professionals yet. Check back soon.'
+                : `No ${professionLabels[filter].toLowerCase()}s yet. Check back soon.`}
+            </Text>
           )
         }
-                renderItem={({ item }) => (
+        renderItem={({ item }) => (
           <Link href={{ pathname: '/customer/professional/[id]', params: { id: item.id } }} asChild>
             <Pressable style={styles.card}>
               <View style={styles.avatar}>
@@ -102,6 +123,11 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#ffffff' },
   content: { padding: 24, paddingBottom: 48 },
   title: { fontSize: 26, fontWeight: '700', color: '#000000', marginBottom: 16 },
+  filters: { gap: 8, paddingBottom: 20 },
+  chip: { borderWidth: 1, borderColor: '#cccccc', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
+  chipSelected: { backgroundColor: '#000000', borderColor: '#000000' },
+  chipText: { color: '#000000' },
+  chipTextSelected: { color: '#ffffff' },
   error: { color: '#c62828', marginBottom: 16 },
   empty: { fontSize: 16, color: '#666666', textAlign: 'center', marginTop: 32 },
   card: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eeeeee', borderRadius: 12, padding: 16, marginBottom: 12 },
