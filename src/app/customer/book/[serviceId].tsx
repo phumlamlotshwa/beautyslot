@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { AddressInput } from '../../../components/address-input';
 import { Avatar } from '../../../components/avatar';
 import { MonthCalendar } from '../../../components/month-calendar';
@@ -11,8 +11,9 @@ import { Place } from '../../../lib/maps';
 import { professionalPhotoUrl } from '../../../lib/photos';
 import { getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../../lib/theme';
-import { ui } from '../../../lib/ui';
+import { fonts, radius, spacing } from '../../../lib/theme';
+import { makeStyles, useTheme } from '../../../lib/theme-context';
+import { useUi } from '../../../lib/ui';
 
 type Service = {
   id: number;
@@ -38,6 +39,9 @@ function formatTime(date: Date) {
 }
 
 export default function BookService() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { serviceId } = useLocalSearchParams<{ serviceId: string }>();
 
   const today = new Date();
@@ -89,7 +93,7 @@ export default function BookService() {
         .single();
 
       if (serviceError || !serviceData) {
-        setError(serviceError?.message ?? 'Service not found.');
+        setError(serviceError?.message ?? "This service isn't available any more.");
         setLoading(false);
         return;
       }
@@ -270,7 +274,7 @@ export default function BookService() {
     setError(null);
 
     if (isHome && !address) {
-      setError('Please search for your address and choose it from the list.');
+      setError('Search for your address and pick it from the list.');
       return;
     }
 
@@ -279,7 +283,7 @@ export default function BookService() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      setError('You need to be logged in to book.');
+      setError('Log in again to book.');
       setConfirming(false);
       return;
     }
@@ -318,7 +322,7 @@ export default function BookService() {
     if (!bookedWith) {
       setConfirming(false);
       if (!lastError || lastError.code === '23P01') {
-        setError('Sorry, someone just booked that time. Please choose another.');
+        setError('Someone just booked that time. Pick another one.');
         resetTimes();
         setRefreshKey((k) => k + 1);
       } else {
@@ -342,9 +346,9 @@ export default function BookService() {
     const withWho = team.length > 1 ? ` with ${bookedWith.name}` : '';
 
     Alert.alert(
-      'Booking requested',
-      `${service.name}${withWho} on ${dayNames[startsAt.getDay()]} ${startsAt.getDate()} ${monthNames[startsAt.getMonth()]} at ${formatTime(startsAt)}${isHome ? ' at your home' : ''}. They'll confirm it soon.`,
-      [{ text: 'OK', onPress: () => router.dismissTo('/customer') }]
+      'Request sent',
+      `${service.name}${withWho} on ${dayNames[startsAt.getDay()]} ${startsAt.getDate()} ${monthNames[startsAt.getMonth()]} at ${formatTime(startsAt)}${isHome ? ' at your home' : ''}. You'll see it under My bookings, and it moves to Confirmed once they accept.`,
+      [{ text: 'Done', onPress: () => router.dismissTo('/customer') }]
     );
   }
 
@@ -372,7 +376,6 @@ export default function BookService() {
         <View style={styles.serviceCard}>
           <Text style={styles.serviceName}>{service.name}</Text>
           <View style={styles.serviceMeta}>
-            <Ionicons name="time-outline" size={15} color={colors.textMuted} />
             <Text style={styles.serviceMetaText}>{formatDuration(service.duration_minutes)}</Text>
             <Text style={styles.servicePrice}>{formatPrice(service.price)}</Text>
           </View>
@@ -391,7 +394,7 @@ export default function BookService() {
                     onPress={() => changeChoice('any')}
                   >
                     <View style={styles.anyIcon}>
-                      <Ionicons name="people-outline" size={18} color={colors.accentDark} />
+                      <Ionicons name="people-outline" size={18} color={colors.text} />
                     </View>
                     <Text style={[styles.staffName, choice === 'any' && styles.staffNameSelected]}>Anyone available</Text>
                   </Pressable>
@@ -411,20 +414,20 @@ export default function BookService() {
 
             {service.offered_at === 'both' && (
               <>
-                <Text style={ui.sectionTitle}>Where?</Text>
+                <Text style={ui.sectionTitle}>Where should it happen?</Text>
                 <View style={styles.row}>
                   <Pressable
                     style={[styles.placeCard, !isHome && styles.placeCardSelected]}
                     onPress={() => setLocationType('at_professional')}
                   >
-                    <Ionicons name="storefront-outline" size={22} color={!isHome ? colors.accentDark : colors.textMuted} />
+                    <Ionicons name="storefront-outline" size={22} color={!isHome ? colors.onAccent : colors.text} />
                     <Text style={[styles.placeText, !isHome && styles.placeTextSelected]}>At their place</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.placeCard, isHome && styles.placeCardSelected]}
                     onPress={() => setLocationType('at_customer')}
                   >
-                    <Ionicons name="home-outline" size={22} color={isHome ? colors.accentDark : colors.textMuted} />
+                    <Ionicons name="home-outline" size={22} color={isHome ? colors.onAccent : colors.text} />
                     <Text style={[styles.placeText, isHome && styles.placeTextSelected]}>At my home</Text>
                   </Pressable>
                 </View>
@@ -445,22 +448,24 @@ export default function BookService() {
                 {quoting && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
                 {!quoting && quote && quote.in_range && (
                   <View style={styles.quoteBox}>
-                    <Ionicons name="car-outline" size={18} color={colors.accentDark} />
+                    <Ionicons name="car-outline" size={18} color={colors.text} />
                     <Text style={styles.quoteText}>
-                      Call-out fee: {formatPrice(quote.fee)} · about {quote.km} km
+                      {Number(quote.fee) > 0
+                        ? `${formatPrice(quote.fee)} call-out fee for about ${quote.km} km`
+                        : `No call-out fee for about ${quote.km} km`}
                     </Text>
                   </View>
                 )}
                 {!quoting && quote && !quote.in_range && (
                   <Text style={ui.error}>
-                    Your address is about {quote.km} km away, outside the area this professional travels to.
+                    Your address is about {quote.km} km away, which is further than they travel. Try booking at their place instead.
                   </Text>
                 )}
                 {!quoting && quoteError && <Text style={ui.error}>{quoteError}</Text>}
               </>
             )}
 
-            <Text style={ui.sectionTitle}>Choose a date</Text>
+            <Text style={ui.sectionTitle}>Pick a day</Text>
 
             {nobodyHasHours ? (
               <Text style={ui.muted}>
@@ -486,7 +491,7 @@ export default function BookService() {
                   Times on {dayNames[selectedDate.getDay()]} {selectedDate.getDate()} {monthNames[selectedDate.getMonth()]}
                 </Text>
                 {slots.length === 0 ? (
-                  <Text style={ui.muted}>No open times on this day. Try another date.</Text>
+                  <Text style={ui.muted}>This day is fully booked. Try another day.</Text>
                 ) : (
                   <View style={styles.slotGrid}>
                     {slots.map((slot) => {
@@ -549,12 +554,16 @@ export default function BookService() {
               <Text style={styles.totalValue}>{!isHome || quote ? formatPrice(total) : '–'}</Text>
             </View>
 
+            <Text style={styles.requestNote}>
+              This sends a request. Your booking is confirmed once they accept it.
+            </Text>
+
             <Pressable
               style={[ui.button, (confirming || !canConfirm) && ui.buttonDisabled]}
               onPress={handleConfirm}
               disabled={confirming || !canConfirm}
             >
-              {confirming ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Confirm booking</Text>}
+              {confirming ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Send booking request</Text>}
             </Pressable>
           </View>
         )}
@@ -563,33 +572,50 @@ export default function BookService() {
   );
 }
 
-const styles = StyleSheet.create({
-  serviceCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
-  serviceName: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
+const useStyles = makeStyles((colors) => ({
+  serviceCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg },
+  serviceName: { fontFamily: fonts.extraBold, fontSize: 20, lineHeight: 24, color: colors.text },
   serviceMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-  serviceMetaText: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, flex: 1 },
-  servicePrice: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  serviceMetaText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, flex: 1 },
+  servicePrice: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
   staffRow: { gap: spacing.sm, paddingVertical: spacing.xs },
-  staffChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingVertical: 6, paddingLeft: 6, paddingRight: spacing.lg },
-  staffChipSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accentDark },
+  staffChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+    paddingLeft: 6,
+    paddingRight: spacing.lg,
+  },
+  staffChipSelected: { backgroundColor: colors.accentDark },
   anyIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
   staffName: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
-  staffNameSelected: { color: colors.accentDark },
+  staffNameSelected: { color: colors.onAccent },
   row: { flexDirection: 'row', gap: spacing.md },
-  placeCard: { flex: 1, alignItems: 'center', gap: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.lg },
-  placeCardSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accentDark },
-  placeText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
-  placeTextSelected: { color: colors.accentDark },
+  placeCard: { flex: 1, alignItems: 'center', gap: 6, backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.lg },
+  placeCardSelected: { backgroundColor: colors.accentDark },
+  placeText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
+  placeTextSelected: { color: colors.onAccent },
   saveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
   saveText: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
-  quoteBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
-  quoteText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
+  quoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  quoteText: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: colors.text },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  slotChip: { width: '31%', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
-  slotChipSelected: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
-  slotText: { fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  slotChip: { width: '31%', backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
+  slotChipSelected: { backgroundColor: colors.accentDark },
+  slotText: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.text },
   slotTextSelected: { color: colors.onAccent },
-  summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginTop: 28 },
+  summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: 28 },
   summaryTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginBottom: spacing.sm },
   summaryLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   summaryText: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
@@ -600,4 +626,5 @@ const styles = StyleSheet.create({
   totalRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.sm, paddingTop: spacing.sm },
   totalLabel: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   totalValue: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
-});
+  requestNote: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.lg },
+}));
