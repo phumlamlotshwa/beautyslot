@@ -20,12 +20,12 @@ export type OfferedAt = 'at_professional' | 'at_customer' | 'both';
 
 export const offeredAtOptions: { value: OfferedAt; label: string }[] = [
   { value: 'at_professional', label: 'At my place' },
-  { value: 'at_customer', label: "At the customer's home" },
+  { value: 'at_customer', label: "House call" },
   { value: 'both', label: 'Both' },
 ];
 
 export const offeredAtLabels: Record<OfferedAt, string> = {
   at_professional: 'At their place',
-  at_customer: 'Home service only',
-  both: 'Home service available',
+  at_customer: 'House call only',
+  both: 'House call available',
 };

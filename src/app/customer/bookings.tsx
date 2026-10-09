@@ -302,7 +302,7 @@ export default function MyBookings() {
                 <View style={styles.line}>
                   <Ionicons name="home-outline" size={15} color={colors.textMuted} />
                   <Text style={styles.lineText}>
-                    {item.address ? `At ${shortAddress(item.address)}` : 'At your home'}
+                    {item.address ? `House call at ${shortAddress(item.address)}` : 'House call'}
                   </Text>
                 </View>
               )}

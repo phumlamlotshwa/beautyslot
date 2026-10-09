@@ -360,7 +360,7 @@ export default function BookService() {
 
     Alert.alert(
       'Request sent',
-      `${service.name}${withWho} on ${dayNames[startsAt.getDay()]} ${startsAt.getDate()} ${monthNames[startsAt.getMonth()]} at ${formatTime(startsAt)}${isHome ? ' at your home' : ''}. You'll see it under My bookings, and it moves to Confirmed once they accept.`,
+      `${service.name}${withWho} on ${dayNames[startsAt.getDay()]} ${startsAt.getDate()} ${monthNames[startsAt.getMonth()]} at ${formatTime(startsAt)}${isHome ? ' as a house call' : ''}. You'll see it under My bookings, and it moves to Confirmed once they accept.`,
       [{ text: 'Done', onPress: () => router.dismissTo('/customer') }]
     );
   }
@@ -441,7 +441,7 @@ export default function BookService() {
                     onPress={() => setLocationType('at_customer')}
                   >
                     <Ionicons name="home-outline" size={22} color={isHome ? colors.onAccent : colors.text} />
-                    <Text style={[styles.placeText, isHome && styles.placeTextSelected]}>At my home</Text>
+                    <Text style={[styles.placeText, isHome && styles.placeTextSelected]}>House call</Text>
                   </Pressable>
                 </View>
               </>
@@ -606,7 +606,7 @@ export default function BookService() {
             </View>
             <View style={styles.summaryLine}>
               <Ionicons name={isHome ? 'home-outline' : 'storefront-outline'} size={16} color={colors.textMuted} />
-              <Text style={styles.summaryText}>{isHome ? 'At your home' : 'At their place'}</Text>
+              <Text style={styles.summaryText}>{isHome ? 'House call' : 'At their place'}</Text>
             </View>
 
             <View style={styles.divider} />

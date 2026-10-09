@@ -186,12 +186,12 @@ export default function HomeVisits() {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="car-outline" size={20} color={colors.accentDark} />
-            <Text style={styles.cardTitle}>Home visit pricing</Text>
+            <Text style={styles.cardTitle}>House call pricing</Text>
           </View>
 
           <Text style={styles.fieldLabel}>Call-out fee (R)</Text>
           <TextInput style={ui.input} value={baseFee} onChangeText={setBaseFee} keyboardType="decimal-pad" />
-          <Text style={styles.fieldHelp}>Added to every home visit. Enter 0 if you don't charge one.</Text>
+          <Text style={styles.fieldHelp}>Added to every house call. Enter 0 if you don't charge one.</Text>
 
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
@@ -230,7 +230,7 @@ export default function HomeVisits() {
             placeholder="No limit"
             placeholderTextColor={colors.textFaint}
           />
-          <Text style={styles.fieldHelp}>Optional. Customers further away can't book you for home visits.</Text>
+          <Text style={styles.fieldHelp}>Optional. Customers further away can't book you for house calls.</Text>
 
           {pricingValid && (
             <View style={styles.preview}>
@@ -240,7 +240,7 @@ export default function HomeVisits() {
                 const total = fee + rate * Math.max(0, km - included);
                 return (
                   <Text key={km} style={styles.previewLine}>
-                    A customer {km} km away {outOfRange ? "can't book a home visit" : `would pay ${formatPrice(total)}`}
+                    A customer {km} km away {outOfRange ? "can't book a house call" : `would pay ${formatPrice(total)}`}
                   </Text>
                 );
               })}

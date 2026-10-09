@@ -167,7 +167,7 @@ export default function ProfessionalHome() {
               <Tile href="/professional/bookings" icon="calendar-outline" label="Bookings" count={newRequests} />
               <MessagesButton variant="tile" style={styles.messagesTile} />
               <Tile href="/professional/hours" icon="time-outline" label="Working hours" />
-              <Tile href="/professional/home-visits" icon="car-outline" label="Home visits" />
+              <Tile href="/professional/home-visits" icon="car-outline" label="House calls" />
             </View>
 
             <Link href="/professional/profile" asChild>

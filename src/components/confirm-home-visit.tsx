@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, Text, View } from 'react-native';
 import { getTravelTime, Point, TravelTime } from '../lib/maps';
 import { supabase } from '../lib/supabase';
-import { colors, fonts, radius, spacing } from '../lib/theme';
-import { ui } from '../lib/ui';
+import { fonts, radius, spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
+import { useUi } from '../lib/ui';
 
 type Props = {
   visible: boolean;
@@ -17,7 +18,12 @@ type Props = {
 const STEP = 5;
 const MAX_BUFFER = 240;
 
+// The sheet a professional sees when confirming a house call.
+// It works out the travel time and lets them set a travel buffer.
 export function ConfirmHomeVisit({ visible, address, destination, onCancel, onConfirm }: Props) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [estimate, setEstimate] = useState<TravelTime | null>(null);
   const [buffer, setBuffer] = useState(30);
   const [loading, setLoading] = useState(false);
@@ -46,7 +52,7 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
       if (cancelled) return;
 
       if (!base) {
-        setError('Set your address under Home visits to see travel times. You can still set a buffer yourself.');
+        setError('Add your base address under House calls to see travel times. You can still set a buffer yourself.');
         setLoading(false);
         return;
       }
@@ -57,7 +63,7 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
         setEstimate(result);
         setBuffer(Math.min(MAX_BUFFER, Math.ceil(result.minutes / STEP) * STEP));
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not work out the travel time.');
+        if (!cancelled) setError(e instanceof Error ? e.message : "The travel time isn't available right now. Set the buffer yourself.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -77,7 +83,7 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
     try {
       await onConfirm(buffer);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not confirm the booking.');
+      setError(e instanceof Error ? e.message : "The booking wasn't confirmed. Try again.");
     } finally {
       setSaving(false);
     }
@@ -87,7 +93,8 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel} />
       <View style={styles.sheet}>
-        <Text style={styles.title}>Confirm home visit</Text>
+        <View style={styles.handle} />
+        <Text style={styles.title}>Confirm house call</Text>
         <View style={styles.addressRow}>
           <Ionicons name="home-outline" size={16} color={colors.textMuted} />
           <Text style={styles.address}>{address}</Text>
@@ -95,16 +102,16 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
 
         <View style={styles.estimateBox}>
           {loading ? (
-            <ActivityIndicator color={colors.accentDark} />
+            <ActivityIndicator color={colors.text} />
           ) : estimate ? (
             <View style={styles.estimateRow}>
-              <Ionicons name="car-outline" size={20} color={colors.accentDark} />
+              <Ionicons name="car-outline" size={20} color={colors.text} />
               <Text style={styles.estimate}>
-                About {estimate.minutes} min · {estimate.km} km from your base
+                About {estimate.minutes} min ({estimate.km} km) from your base
               </Text>
             </View>
           ) : (
-            <Text style={styles.estimateMissing}>Travel time unavailable</Text>
+            <Text style={styles.estimateMissing}>No travel time yet</Text>
           )}
         </View>
 
@@ -115,7 +122,7 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
             onPress={() => setBuffer((b) => Math.max(0, b - STEP))}
             disabled={buffer <= 0}
           >
-            <Ionicons name="remove" size={22} color={buffer <= 0 ? colors.border : colors.accentDark} />
+            <Ionicons name="remove" size={22} color={buffer <= 0 ? colors.border : colors.text} />
           </Pressable>
           <Text style={styles.bufferValue}>{buffer} min</Text>
           <Pressable
@@ -123,7 +130,7 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
             onPress={() => setBuffer((b) => Math.min(MAX_BUFFER, b + STEP))}
             disabled={buffer >= MAX_BUFFER}
           >
-            <Ionicons name="add" size={22} color={buffer >= MAX_BUFFER ? colors.border : colors.accentDark} />
+            <Ionicons name="add" size={22} color={buffer >= MAX_BUFFER ? colors.border : colors.text} />
           </Pressable>
         </View>
         <Text style={styles.help}>
@@ -143,22 +150,39 @@ export function ConfirmHomeVisit({ visible, address, destination, onCancel, onCo
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)' },
-  sheet: { backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.xl, paddingBottom: 40 },
-  title: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
+const useStyles = makeStyles((colors) => ({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  sheet: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: 40,
+  },
+  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.lg },
+  title: { fontFamily: fonts.extraBold, fontSize: 22, color: colors.text },
   addressRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginTop: spacing.sm },
-  address: { flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted },
-  estimateBox: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg, alignItems: 'center' },
+  address: { flex: 1, fontFamily: fonts.regular, fontSize: 15, lineHeight: 21, color: colors.textMuted },
+  estimateBox: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg, alignItems: 'center' },
   estimateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  estimate: { fontFamily: fonts.medium, fontSize: 16, color: colors.accentDark },
+  estimate: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.text },
   estimateMissing: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted },
-  label: { fontFamily: fonts.medium, fontSize: 15, color: colors.text, marginTop: spacing.xl, textAlign: 'center' },
+  label: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text, marginTop: spacing.xl, textAlign: 'center' },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl, marginTop: spacing.md },
-  stepButton: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: colors.accentDark, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  stepButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: colors.accentDark,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   stepButtonDisabled: { borderColor: colors.border },
-  bufferValue: { fontFamily: fonts.bold, fontSize: 24, color: colors.text, minWidth: 100, textAlign: 'center' },
-  help: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: spacing.md, textAlign: 'center' },
+  bufferValue: { fontFamily: fonts.extraBold, fontSize: 26, color: colors.text, minWidth: 100, textAlign: 'center' },
+  help: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.md, textAlign: 'center' },
   cancelButton: { padding: 14, alignItems: 'center', marginTop: spacing.xs },
-  cancelText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
-});
+  cancelText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.textMuted },
+}));

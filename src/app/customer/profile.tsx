@@ -223,7 +223,7 @@ export default function CustomerProfile() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>My addresses</Text>
           <Text style={styles.cardHelp}>
-            For home visits. A professional only sees an address once you book a visit with them.
+            For house calls. A professional only sees an address once you book a visit with them.
           </Text>
 
           {addresses.length === 0 && !adding && <Text style={styles.empty}>No saved addresses yet.</Text>}

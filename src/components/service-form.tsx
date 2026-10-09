@@ -112,7 +112,7 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
           ))}
         </View>
         {offeredAt !== 'at_professional' && (
-          <Text style={ui.help}>Make sure your address and call-out fees are set under Home visits.</Text>
+          <Text style={ui.help}>Make sure your address and call-out fees are set under House calls.</Text>
         )}
 
         <View style={styles.row}>

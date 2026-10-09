@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, SectionList, Text, View } from 'react-native';
 import { Avatar } from '../../components/avatar';
 import { ConfirmHomeVisit } from '../../components/confirm-home-visit';
 import { CountBadge } from '../../components/count-badge';
@@ -9,8 +9,9 @@ import { formatPrice } from '../../lib/format';
 import { customerPhotoUrls } from '../../lib/photos';
 import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../lib/theme';
-import { ui } from '../../lib/ui';
+import { fonts, radius, spacing } from '../../lib/theme';
+import { makeStyles, useTheme } from '../../lib/theme-context';
+import { useUi } from '../../lib/ui';
 
 type Booking = {
   id: number;
@@ -38,6 +39,9 @@ function formatBookingTime(iso: string) {
 }
 
 export default function ProfessionalBookings() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [customerAvatars, setCustomerAvatars] = useState<Record<string, string>>({});
   const [staffFilter, setStaffFilter] = useState<number | 'all'>('all');
@@ -239,7 +243,7 @@ export default function ProfessionalBookings() {
           <View style={styles.emptyBox}>
             <Ionicons name="calendar-outline" size={40} color={colors.textFaint} />
             <Text style={styles.emptyTitle}>No bookings yet</Text>
-            <Text style={styles.emptyText}>When customers book you, their requests will show up here.</Text>
+            <Text style={styles.emptyText}>When customers book you, their requests show up here.</Text>
           </View>
         }
         renderSectionHeader={({ section }) => (
@@ -251,7 +255,7 @@ export default function ProfessionalBookings() {
           </Pressable>
         )}
         renderItem={({ item }) => {
-          const status = statusStyle(item.status, 'professional');
+          const status = statusStyle(item.status, 'professional', colors);
           const future = isFuture(item);
           const busy = updatingId === item.id;
           const isHome = item.location_type === 'at_customer';
@@ -295,8 +299,8 @@ export default function ProfessionalBookings() {
               {isHome && (
                 <View style={styles.homeBox}>
                   <View style={styles.homeTitleRow}>
-                    <Ionicons name="home-outline" size={15} color={colors.accentDark} />
-                    <Text style={styles.homeTitle}>Home visit</Text>
+                    <Ionicons name="home-outline" size={15} color={colors.text} />
+                    <Text style={styles.homeTitle}>House call</Text>
                   </View>
                   <Text style={styles.homeAddress}>{item.address}</Text>
                   {item.travel_minutes > 0 && (
@@ -332,7 +336,7 @@ export default function ProfessionalBookings() {
               {!busy && canMove && (
                 <Link href={{ pathname: '/professional/reschedule/[bookingId]', params: { bookingId: String(item.id) } }} asChild>
                   <Pressable style={styles.moveButton}>
-                    <Ionicons name="time-outline" size={16} color={colors.accentDark} />
+                    <Ionicons name="time-outline" size={16} color={colors.text} />
                     <Text style={styles.moveText}>
                       {item.status === 'reschedule_proposed' ? 'Suggest a different time' : 'Suggest a new time'}
                     </Text>
@@ -348,7 +352,7 @@ export default function ProfessionalBookings() {
 
               {!busy && canComplete && (
                 <Pressable style={styles.moveButton} onPress={() => updateStatus(item, 'completed')}>
-                  <Ionicons name="checkmark-done-outline" size={16} color={colors.accentDark} />
+                  <Ionicons name="checkmark-done-outline" size={16} color={colors.text} />
                   <Text style={styles.moveText}>Mark as completed</Text>
                 </Pressable>
               )}
@@ -370,41 +374,59 @@ export default function ProfessionalBookings() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   filters: { gap: spacing.sm, paddingBottom: spacing.lg },
   chipRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.md,
+  },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
   emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
   emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
-  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginBottom: spacing.md },
-  fadedCard: { opacity: 0.75 },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  fadedCard: { opacity: 0.7 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
   serviceName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
-  badgeText: { fontFamily: fonts.medium, fontSize: 12 },
+  badgeText: { fontFamily: fonts.semiBold, fontSize: 12 },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
-  homeBox: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  homeBox: { backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
   homeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  homeTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.accentDark },
-  homeAddress: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, marginTop: 4 },
+  homeTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
+  homeAddress: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
   homeDetail: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
   waitingText: { fontFamily: fonts.medium, fontSize: 14, color: colors.info, marginTop: spacing.md },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md },
   price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   priceNote: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  actionButton: { flex: 1, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center', borderWidth: 1 },
+  actionButton: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5 },
   primary: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
-  primaryText: { fontFamily: fonts.medium, fontSize: 15, color: colors.onAccent },
+  primaryText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.onAccent },
   danger: { borderColor: colors.danger, backgroundColor: colors.surface },
-  dangerText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
-  moveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.accentDark, borderRadius: radius.sm, paddingVertical: 10, marginTop: spacing.md },
-  moveText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
+  dangerText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.danger },
+  moveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: colors.accentDark,
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginTop: spacing.md,
+  },
+  moveText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
   cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
-  cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
-});
+  cancelText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.danger },
+}));
