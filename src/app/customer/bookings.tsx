@@ -1,14 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, SectionList, Text, View } from 'react-native';
 import { formatPrice } from '../../lib/format';
 import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../lib/theme';
-import { ui } from '../../lib/ui';
+import { fonts, radius, spacing } from '../../lib/theme';
+import { makeStyles, useTheme } from '../../lib/theme-context';
+import { useUi } from '../../lib/ui';
 import { Avatar } from '../../components/avatar';
 import { professionalPhotoUrl } from '../../lib/photos';
+import { shortAddress } from '../../lib/location';
 
 type Booking = {
   id: number;
@@ -50,6 +52,9 @@ function openDirections(address: string) {
 }
 
 export default function MyBookings() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [proAddresses, setProAddresses] = useState<Record<number, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -224,7 +229,7 @@ export default function MyBookings() {
           <View style={styles.emptyBox}>
             <Ionicons name="calendar-outline" size={40} color={colors.textFaint} />
             <Text style={styles.emptyTitle}>No bookings yet</Text>
-            <Text style={styles.emptyText}>When you book a professional, it'll show up here.</Text>
+            <Text style={styles.emptyText}>When you book someone, it shows up here.</Text>
           </View>
         }
         renderSectionHeader={({ section }) => (
@@ -296,7 +301,9 @@ export default function MyBookings() {
               {isHome && (
                 <View style={styles.line}>
                   <Ionicons name="home-outline" size={15} color={colors.textMuted} />
-                  <Text style={styles.lineText}>At your home</Text>
+                  <Text style={styles.lineText}>
+                    {item.address ? `At ${shortAddress(item.address)}` : 'At your home'}
+                  </Text>
                 </View>
               )}
 
@@ -307,13 +314,13 @@ export default function MyBookings() {
                       <Text style={styles.addressLabel}>Where to go</Text>
                       <Text style={styles.addressText}>{proAddress}</Text>
                       <Pressable style={styles.directionsButton} onPress={() => openDirections(proAddress)}>
-                        <Ionicons name="navigate-outline" size={15} color={colors.accentDark} />
+                        <Ionicons name="navigate-outline" size={15} color={colors.text} />
                         <Text style={styles.directionsText}>Get directions</Text>
                       </Pressable>
                     </>
                   ) : (
                     <Text style={styles.addressText}>
-                      The address isn't available yet. Message {item.professionals?.first_name ?? 'the professional'} for directions.
+                      The address isn't showing yet. Message {item.professionals?.first_name ?? 'them'} for directions.
                     </Text>
                   )}
                 </View>
@@ -352,39 +359,58 @@ export default function MyBookings() {
   );
 }
 
-const styles = StyleSheet.create({
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
+const useStyles = makeStyles((colors) => ({
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.md,
+  },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
   emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
   emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
-  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, marginBottom: spacing.md },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
   proposalCard: { borderColor: colors.info, borderWidth: 2 },
-  fadedCard: { opacity: 0.75 },
+  fadedCard: { opacity: 0.7 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
   serviceName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
-  badgeText: { fontFamily: fonts.medium, fontSize: 12 },
+  badgeText: { fontFamily: fonts.semiBold, fontSize: 12 },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
   oldTime: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textFaint, textDecorationLine: 'line-through' },
   newTime: { flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.info },
   addressBox: { backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
   addressLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
-  addressText: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, marginTop: 4 },
-  directionsButton: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accentDark, borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 14, marginTop: spacing.md },
-  directionsText: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
+  addressText: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
+  directionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1.5,
+    borderColor: colors.accentDark,
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginTop: spacing.md,
+  },
+  directionsText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md },
   price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   priceNote: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  actionButton: { flex: 1, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center', borderWidth: 1 },
+  actionButton: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5 },
   primary: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
-  primaryText: { fontFamily: fonts.medium, fontSize: 15, color: colors.onAccent },
+  primaryText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.onAccent },
   danger: { borderColor: colors.danger, backgroundColor: colors.surface },
-  dangerText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
+  dangerText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.danger },
   cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
-  cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
-});
+  cancelText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.danger },
+}));
