@@ -10,8 +10,8 @@ import { supabase } from '../../lib/supabase';
 import { colors, fonts, radius, spacing } from '../../lib/theme';
 import { ui } from '../../lib/ui';
 import { Avatar } from '../../components/avatar';
-import { customerPhotoUrls } from '../../lib/photos';
-import { professionalPhotoUrl } from '../../lib/photos';
+import { CountBadge } from '../../components/count-badge';
+import { customerPhotoUrls, professionalPhotoUrl } from '../../lib/photos';
 
 type Professional = {
   id: string;
@@ -49,6 +49,7 @@ export default function CustomerHome() {
   const [error, setError] = useState<string | null>(null);
   const [myName, setMyName] = useState('');
   const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
+  const [waitingCount, setWaitingCount] = useState(0);
 
   useEffect(() => {
     getStartingLocation().then((location) => {
@@ -71,7 +72,8 @@ export default function CustomerHome() {
         } else {
           setProfessionals((data ?? []) as unknown as Professional[]);
         }
-                const { data: { user } } = await supabase.auth.getUser();
+
+        const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: me } = await supabase.from('customers').select('first_name, avatar_path').eq('id', user.id).single();
           if (me) {
@@ -79,6 +81,16 @@ export default function CustomerHome() {
             const urls = await customerPhotoUrls([me.avatar_path]);
             setMyAvatarUrl(me.avatar_path ? urls[me.avatar_path] ?? null : null);
           }
+
+          // New times suggested by a professional, still waiting for Accept or Decline
+          const { count } = await supabase
+            .from('bookings')
+            .select('id', { count: 'exact', head: true })
+            .eq('customer_id', user.id)
+            .eq('status', 'reschedule_proposed')
+            .gte('starts_at', new Date().toISOString());
+
+          setWaitingCount(count ?? 0);
         }
 
         setLoading(false);
@@ -126,7 +138,7 @@ export default function CustomerHome() {
         contentContainerStyle={ui.content}
         ListHeaderComponent={
           <>
-                      <View style={styles.titleRow}>
+            <View style={styles.titleRow}>
               <Text style={[ui.title, { marginBottom: 0, flex: 1 }]}>Find a professional</Text>
               <Link href="/customer/profile" asChild>
                 <Pressable hitSlop={8}>
@@ -140,6 +152,7 @@ export default function CustomerHome() {
                 <Pressable style={styles.topButton}>
                   <Ionicons name="calendar-outline" size={20} color={colors.accentDark} />
                   <Text style={styles.topButtonText}>My bookings</Text>
+                  <CountBadge count={waitingCount} />
                 </Pressable>
               </Link>
               <MessagesButton style={{ flex: 1 }} />
@@ -246,5 +259,5 @@ const styles = StyleSheet.create({
   distance: { fontFamily: fonts.medium, fontSize: 13, color: colors.accentDark },
   logOut: { alignItems: 'center', padding: spacing.lg, marginTop: spacing.lg },
   logOutText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
 });

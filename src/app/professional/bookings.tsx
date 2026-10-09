@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/avatar';
 import { ConfirmHomeVisit } from '../../components/confirm-home-visit';
+import { CountBadge } from '../../components/count-badge';
 import { formatPrice } from '../../lib/format';
 import { customerPhotoUrls } from '../../lib/photos';
 import { BookingStatus, statusStyle } from '../../lib/status';
@@ -155,6 +156,13 @@ export default function ProfessionalBookings() {
 
   const team = [...new Map(bookings.filter((b) => b.staff).map((b) => [b.staff_id, b.staff!.name])).entries()]
     .map(([id, name]) => ({ id, name }));
+
+  // New requests waiting to be confirmed, for everyone or for one stylist
+  const newCount = (staffId: number | 'all') =>
+    bookings.filter(
+      (b) => b.status === 'pending' && isFuture(b) && (staffId === 'all' || b.staff_id === staffId)
+    ).length;
+
   const visible = staffFilter === 'all' ? bookings : bookings.filter((b) => b.staff_id === staffFilter);
 
   const newRequests = visible.filter((b) => b.status === 'pending' && isFuture(b));
@@ -206,18 +214,20 @@ export default function ProfessionalBookings() {
             {team.length > 1 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
                 <Pressable
-                  style={[ui.chip, staffFilter === 'all' && ui.chipSelected]}
+                  style={[ui.chip, styles.chipRow, staffFilter === 'all' && ui.chipSelected]}
                   onPress={() => setStaffFilter('all')}
                 >
                   <Text style={[ui.chipText, staffFilter === 'all' && ui.chipTextSelected]}>Everyone</Text>
+                  <CountBadge count={newCount('all')} />
                 </Pressable>
                 {team.map((m) => (
                   <Pressable
                     key={m.id}
-                    style={[ui.chip, staffFilter === m.id && ui.chipSelected]}
+                    style={[ui.chip, styles.chipRow, staffFilter === m.id && ui.chipSelected]}
                     onPress={() => setStaffFilter(m.id)}
                   >
                     <Text style={[ui.chipText, staffFilter === m.id && ui.chipTextSelected]}>{m.name}</Text>
+                    <CountBadge count={newCount(m.id)} />
                   </Pressable>
                 ))}
               </ScrollView>
@@ -362,6 +372,7 @@ export default function ProfessionalBookings() {
 
 const styles = StyleSheet.create({
   filters: { gap: spacing.sm, paddingBottom: spacing.lg },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },

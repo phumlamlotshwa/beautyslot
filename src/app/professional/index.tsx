@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { ComponentProps, useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { CountBadge } from '../../components/count-badge';
 import { MessagesButton } from '../../components/messages-button';
 import { formatDuration, formatPrice, OfferedAt, offeredAtLabels } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
@@ -19,17 +20,24 @@ type Service = {
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
-function Tile({ href, icon, label, count }: { href: '/professional/bookings' | '/professional/hours' | '/professional/home-visits' | '/professional/profile'; icon: IconName; label: string; count?: number }) {
-return (
+type TileProps = {
+  href: '/professional/bookings' | '/professional/hours' | '/professional/home-visits' | '/professional/profile';
+  icon: IconName;
+  label: string;
+  count?: number;
+};
+
+function Tile({ href, icon, label, count = 0 }: TileProps) {
+  return (
     <Link href={href} asChild>
       <Pressable style={styles.tile}>
         <Ionicons name={icon} size={24} color={colors.accentDark} />
         <Text style={styles.tileText}>{label}</Text>
-        {count ? (
+        {count > 0 && (
           <View style={styles.tileBadge}>
-            <Text style={styles.tileBadgeText}>{count > 99 ? '99+' : count}</Text>
+            <CountBadge count={count} />
           </View>
-        ) : null}
+        )}
       </Pressable>
     </Link>
   );
@@ -94,7 +102,7 @@ export default function ProfessionalHome() {
         contentContainerStyle={ui.content}
         ListHeaderComponent={
           <>
-                      <Link href="/professional/profile" asChild>
+            <Link href="/professional/profile" asChild>
               <Pressable style={styles.profileRow}>
                 <Ionicons name="person-circle-outline" size={28} color={colors.accentDark} />
                 <View style={{ flex: 1 }}>
@@ -104,7 +112,7 @@ export default function ProfessionalHome() {
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
               </Pressable>
             </Link>
-             <Link href="/professional/team" asChild>
+            <Link href="/professional/team" asChild>
               <Pressable style={styles.profileRow}>
                 <Ionicons name="people-outline" size={28} color={colors.accentDark} />
                 <View style={{ flex: 1 }}>
@@ -114,6 +122,7 @@ export default function ProfessionalHome() {
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
               </Pressable>
             </Link>
+
             <View style={styles.grid}>
               <Tile href="/professional/bookings" icon="calendar-outline" label="Bookings" count={newRequests} />
               <MessagesButton style={styles.messagesTile} />
@@ -180,8 +189,7 @@ const styles = StyleSheet.create({
   tile: { width: '48%', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 18 },
   messagesTile: { width: '48%', flexDirection: 'column', gap: 6, paddingVertical: 18 },
   tileText: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
-  tileBadge: { position: 'absolute', top: 10, right: 10, minWidth: 22, height: 22, borderRadius: 11, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  tileBadgeText: { fontFamily: fonts.bold, fontSize: 12, color: colors.onAccent },
+  tileBadge: { position: 'absolute', top: 10, right: 10 },
   servicesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xxl, marginBottom: spacing.md },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentDark, borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: 14 },
@@ -197,7 +205,7 @@ const styles = StyleSheet.create({
   price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   logOut: { alignItems: 'center', padding: spacing.lg, marginTop: spacing.lg },
   logOutText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
-    profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
   profileTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   profileHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 2 },
 });
