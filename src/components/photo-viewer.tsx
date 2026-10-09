@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Modal, Pressable, StatusBar, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fonts, spacing } from '../lib/theme';
 
 export type ViewerPhoto = { id: number; url: string; caption: string | null };
@@ -14,6 +15,7 @@ type Props = {
 
 export function PhotoViewer({ photos, startIndex, onClose }: Props) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -24,11 +26,10 @@ export function PhotoViewer({ photos, startIndex, onClose }: Props) {
 
   return (
     <Modal visible={startIndex !== null} animationType="fade" onRequestClose={onClose}>
+      <StatusBar barStyle="light-content" />
       <View style={styles.screen}>
-        <View style={styles.topBar}>
-          <Text style={styles.counter}>
-            {photos.length > 1 ? `${index + 1} / ${photos.length}` : ''}
-          </Text>
+        <View style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}>
+          <Text style={styles.counter}>{photos.length > 1 ? `${index + 1} of ${photos.length}` : ''}</Text>
           <Pressable onPress={onClose} hitSlop={12} accessibilityLabel="Close photo">
             <Ionicons name="close" size={28} color="#FFFFFF" />
           </Pressable>
@@ -46,13 +47,18 @@ export function PhotoViewer({ photos, startIndex, onClose }: Props) {
             onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item }) => (
               <View style={{ width, flex: 1, justifyContent: 'center' }}>
-                <Image source={{ uri: item.url }} style={{ width, height: '100%' }} contentFit="contain" transition={150} />
+                <Image
+                  source={{ uri: item.url }}
+                  style={{ width, height: '100%' }}
+                  contentFit="contain"
+                  transition={150}
+                />
               </View>
             )}
           />
         )}
 
-        <View style={styles.captionArea}>
+        <View style={[styles.captionArea, { paddingBottom: insets.bottom + spacing.xl }]}>
           {current?.caption ? <Text style={styles.caption}>{current.caption}</Text> : null}
         </View>
       </View>
@@ -62,8 +68,14 @@ export function PhotoViewer({ photos, startIndex, onClose }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#000000' },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: 60, paddingBottom: spacing.md },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+  },
   counter: { fontFamily: fonts.medium, fontSize: 15, color: '#FFFFFF' },
-  captionArea: { minHeight: 90, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 40 },
+  captionArea: { minHeight: 90, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   caption: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
 });
