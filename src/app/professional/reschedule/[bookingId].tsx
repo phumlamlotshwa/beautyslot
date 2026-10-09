@@ -17,6 +17,8 @@ type Booking = {
   travel_minutes: number;
   services: { name: string; duration_minutes: number } | null;
   customers: { first_name: string } | null;
+    staff_id: number;
+  staff: { name: string } | null;
 };
 
 type Hours = {
@@ -63,7 +65,7 @@ export default function SuggestNewTime() {
     async function loadBooking() {
       const { data, error: loadError } = await supabase
         .from('bookings')
-        .select('id, professional_id, starts_at, status, previous_starts_at, travel_minutes, services(name, duration_minutes), customers(first_name)')
+        .select('id, professional_id, staff_id, staff(name), starts_at, status, previous_starts_at, travel_minutes, services(name, duration_minutes), customers(first_name)')
         .eq('id', bookingId)
         .single();
 
@@ -78,7 +80,7 @@ export default function SuggestNewTime() {
       const { data: hoursData } = await supabase
         .from('working_hours')
         .select('day_of_week, start_time, end_time')
-        .eq('professional_id', typed.professional_id);
+        .eq('staff_id', typed.staff_id);
 
       setBooking(typed);
       setHours(hoursData ?? []);
@@ -106,7 +108,7 @@ export default function SuggestNewTime() {
       const { data, error: busyError } = await supabase
         .from('bookings')
         .select('starts_at, ends_at, travel_minutes')
-        .eq('professional_id', booking.professional_id)
+        .eq('staff_id', booking.staff_id)
         .in('status', ['pending', 'confirmed', 'reschedule_proposed'])
         .neq('id', booking.id)
         .lt('starts_at', searchTo.toISOString())
@@ -242,6 +244,10 @@ export default function SuggestNewTime() {
         <View style={styles.line}>
           <Ionicons name="person-outline" size={15} color={colors.textMuted} />
           <Text style={styles.lineText}>{booking.customers?.first_name}</Text>
+        </View>
+        <View style={styles.line}>
+          <Ionicons name="cut-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.lineText}>With {booking.staff?.name}</Text>
         </View>
         <View style={styles.line}>
           <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
