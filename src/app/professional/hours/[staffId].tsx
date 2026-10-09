@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { Avatar } from '../../../components/avatar';
 import { SelectField, SelectOption } from '../../../components/select-field';
 import { Toggle } from '../../../components/toggle';
 import { DAY_ORDER, HoursRow, LONG_DAYS, SHORT_DAYS, summarizeHours } from '../../../lib/hours';
 import { professionalPhotoUrl } from '../../../lib/photos';
 import { supabase } from '../../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../../lib/theme';
-import { ui } from '../../../lib/ui';
+import { fonts, radius, spacing } from '../../../lib/theme';
+import { makeStyles, useTheme } from '../../../lib/theme-context';
+import { useUi } from '../../../lib/ui';
 
 type DayHours = { day: number; open: boolean; start: string; end: string };
 type Teammate = { id: number; name: string; working_hours: HoursRow[] };
@@ -37,6 +38,9 @@ function sameTimesEveryDay(week: DayHours[]) {
 }
 
 export default function MemberHours() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { staffId } = useLocalSearchParams<{ staffId: string }>();
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -67,7 +71,9 @@ export default function MemberHours() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         setLoading(false);
         return;
@@ -82,14 +88,14 @@ export default function MemberHours() {
         .order('created_at', { ascending: true });
 
       if (loadError || !data) {
-        setError(loadError?.message ?? 'Could not load hours.');
+        setError("We couldn't load these hours. Go back and try again.");
         setLoading(false);
         return;
       }
 
       const me = data.find((m) => m.id === Number(staffId));
       if (!me) {
-        setError('Team member not found.');
+        setError("We couldn't find this person on your team.");
         setLoading(false);
         return;
       }
@@ -97,9 +103,7 @@ export default function MemberHours() {
       setName(me.name);
       setAvatarPath(me.avatar_path);
       applyWeek(weekFromRows(me.working_hours as HoursRow[]));
-      setTeammates(
-        (data as Teammate[]).filter((m) => m.id !== me.id && m.working_hours.length > 0)
-      );
+      setTeammates((data as Teammate[]).filter((m) => m.id !== me.id && m.working_hours.length > 0));
       setLoading(false);
     }
 
@@ -135,21 +139,21 @@ export default function MemberHours() {
 
   const finalWeek = simple ? week.map((d) => ({ ...d, start: simpleStart, end: simpleEnd })) : week;
   const openDays = finalWeek.filter((d) => d.open);
-  const preview = summarizeHours(
-    openDays.map((d) => ({ day_of_week: d.day, start_time: d.start, end_time: d.end }))
-  );
+  const preview = summarizeHours(openDays.map((d) => ({ day_of_week: d.day, start_time: d.start, end_time: d.end })));
 
   async function handleSave() {
     if (!userId) return;
     setError(null);
 
     if (openDays.length === 0) {
-      setError(`Choose at least one day. If ${name} isn't working at the moment, switch off "Taking bookings" in My team.`);
+      setError(
+        `Choose at least one day. If ${name} isn't working at the moment, switch off "Taking bookings" in My team.`,
+      );
       return;
     }
     for (const d of openDays) {
       if (d.end <= d.start) {
-        setError(`${LONG_DAYS[d.day]}: closing time must be after opening time.`);
+        setError(`On ${LONG_DAYS[d.day]}, the closing time has to be after the opening time.`);
         return;
       }
     }
@@ -166,7 +170,7 @@ export default function MemberHours() {
         .in('day_of_week', closedDays);
 
       if (deleteError) {
-        setError(deleteError.message);
+        setError("Couldn't save. Check your connection and try again.");
         setSaving(false);
         return;
       }
@@ -180,13 +184,13 @@ export default function MemberHours() {
         start_time: d.start,
         end_time: d.end,
       })),
-      { onConflict: 'staff_id,day_of_week' }
+      { onConflict: 'staff_id,day_of_week' },
     );
 
     setSaving(false);
 
     if (saveError) {
-      setError(saveError.message);
+      setError("Couldn't save. Check your connection and try again.");
       return;
     }
 
@@ -253,7 +257,7 @@ export default function MemberHours() {
           </View>
 
           <Pressable style={styles.modeLink} onPress={switchToDetailed}>
-            <Ionicons name="options-outline" size={16} color={colors.accentDark} />
+            <Ionicons name="options-outline" size={16} color={colors.text} />
             <Text style={styles.modeLinkText}>Different hours on some days?</Text>
           </Pressable>
         </View>
@@ -297,7 +301,7 @@ export default function MemberHours() {
           </View>
 
           <Pressable style={styles.modeLink} onPress={switchToSimple}>
-            <Ionicons name="reorder-two-outline" size={16} color={colors.accentDark} />
+            <Ionicons name="reorder-two-outline" size={16} color={colors.text} />
             <Text style={styles.modeLinkText}>Use the same hours every day</Text>
           </Pressable>
         </>
@@ -317,37 +321,52 @@ export default function MemberHours() {
       {error && <Text style={ui.error}>{error}</Text>}
 
       <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleSave} disabled={saving}>
-        {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Save {name}'s hours</Text>}
+        {saving ? (
+          <ActivityIndicator color={colors.onAccent} />
+        ) : (
+          <Text style={ui.buttonText}>Save {name}'s hours</Text>
+        )}
       </Pressable>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
   headerLabel: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
   headerName: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
-  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg },
   cardTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text, marginBottom: spacing.md },
   dayChips: { flexDirection: 'row', gap: 6 },
-  dayChip: { flex: 1, paddingVertical: 10, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center', backgroundColor: colors.background },
-  dayChipOn: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
-  dayChipText: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
+  dayChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+  },
+  dayChipOn: { backgroundColor: colors.accentDark },
+  dayChipText: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.textMuted },
   dayChipTextOn: { color: colors.onAccent },
   timesRow: { flexDirection: 'row', gap: spacing.md },
   timeLabel: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginBottom: 4 },
   modeLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: spacing.lg },
-  modeLinkText: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
+  modeLinkText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text, textDecorationLine: 'underline' },
   list: { gap: spacing.sm, marginTop: spacing.lg },
-  dayCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md },
-  dayCardClosed: { backgroundColor: 'transparent' },
-  dayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  dayCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md },
+  dayCardClosed: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
+  dayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
   dayLabel: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   dayLabelClosed: { color: colors.textMuted },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   status: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
-  statusOpen: { fontFamily: fonts.medium, color: colors.accentDark },
-  preview: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.xl },
-  previewTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.accentDark, marginBottom: 4 },
-  previewLine: { fontFamily: fonts.regular, fontSize: 15, color: colors.text, marginTop: 2 },
-});
+  statusOpen: { fontFamily: fonts.semiBold, color: colors.text },
+  preview: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.xl },
+  previewTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.text, marginBottom: 4 },
+  previewLine: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginTop: 2 },
+}));

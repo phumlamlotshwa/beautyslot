@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { Avatar } from '../../../components/avatar';
 import { HoursRow, summarizeHours } from '../../../lib/hours';
 import { professionalPhotoUrl } from '../../../lib/photos';
 import { supabase } from '../../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../../lib/theme';
-import { ui } from '../../../lib/ui';
+import { fonts, radius, spacing } from '../../../lib/theme';
+import { makeStyles, useTheme } from '../../../lib/theme-context';
+import { useUi } from '../../../lib/ui';
 
 type Member = {
   id: number;
@@ -17,6 +18,9 @@ type Member = {
 };
 
 export default function TeamHours() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +28,9 @@ export default function TeamHours() {
   useFocusEffect(
     useCallback(() => {
       async function load() {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) {
           setLoading(false);
           return;
@@ -38,7 +44,7 @@ export default function TeamHours() {
           .order('created_at', { ascending: true });
 
         if (loadError) {
-          setError(loadError.message);
+          setError("We couldn't load your team's hours. Check your connection and try again.");
           setLoading(false);
           return;
         }
@@ -55,7 +61,7 @@ export default function TeamHours() {
       }
 
       load();
-    }, [])
+    }, []),
   );
 
   if (loading) {
@@ -74,7 +80,7 @@ export default function TeamHours() {
         contentContainerStyle={ui.content}
         ListHeaderComponent={
           <>
-            <Text style={ui.muted}>Your team's week at a glance. Tap someone to change their hours.</Text>
+            <Text style={ui.muted}>Tap someone to change their hours.</Text>
             {error && <Text style={ui.error}>{error}</Text>}
             <View style={{ height: spacing.lg }} />
           </>
@@ -94,7 +100,7 @@ export default function TeamHours() {
                       </Text>
                     ))
                   ) : (
-                    <Text style={styles.noHours}>No hours set. Customers can't book them yet.</Text>
+                    <Text style={styles.noHours}>No hours yet, so nobody can book {item.name}.</Text>
                   )}
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
@@ -107,9 +113,17 @@ export default function TeamHours() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+const useStyles = makeStyles((colors) => ({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
   name: { fontFamily: fonts.bold, fontSize: 16, color: colors.text, marginBottom: 2 },
   hours: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 2 },
   noHours: { fontFamily: fonts.medium, fontSize: 13, color: colors.warning, marginTop: 2 },
-});
+}));
