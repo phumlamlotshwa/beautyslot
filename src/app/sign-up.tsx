@@ -55,6 +55,14 @@ export default function SignUp() {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        data: {
+          role,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          profession: role === 'professional' ? profession : null,
+        },
+      },
     });
 
     if (signUpError || !data.user) {
@@ -63,31 +71,25 @@ export default function SignUp() {
       } else if (signUpError?.message.toLowerCase().includes('email')) {
         setError("That email address doesn't look right. Check it and try again.");
       } else {
-        setError(signUpError?.message ?? "Your account wasn't created. Check your connection and try again.");
+        setError("Your account wasn't created. Check your connection and try again.");
       }
       setLoading(false);
       return;
     }
 
-    const profile = {
-      id: data.user.id,
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-    };
-
-    const { error: profileError } =
-      role === 'customer'
-        ? await supabase.from('customers').insert(profile)
-        : await supabase.from('professionals').insert({ ...profile, profession });
-
     setLoading(false);
 
-    if (profileError) {
-      setError(profileError.message);
+    if (data.user.identities?.length === 0) {
+      setError('There is already an account with this email. Log in instead.');
       return;
     }
 
-    router.replace(role === 'customer' ? '/customer' : '/professional');
+    if (data.session) {
+      router.replace(role === 'customer' ? '/customer' : '/professional');
+      return;
+    }
+
+    router.replace({ pathname: '/verify-email', params: { email: email.trim() } });
   }
 
   return (
