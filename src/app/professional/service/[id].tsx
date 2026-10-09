@@ -1,14 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 import { ServiceForm, ServiceValues } from '../../../components/service-form';
 import { OfferedAt } from '../../../lib/format';
 import { supabase } from '../../../lib/supabase';
-import { colors, fonts, spacing } from '../../../lib/theme';
-import { ui } from '../../../lib/ui';
+import { fonts, spacing } from '../../../lib/theme';
+import { makeStyles, useTheme } from '../../../lib/theme-context';
+import { useUi } from '../../../lib/ui';
 
 export default function EditService() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [initial, setInitial] = useState<ServiceValues | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +28,7 @@ export default function EditService() {
         .single();
 
       if (loadError || !data) {
-        setError(loadError?.message ?? 'Service not found.');
+        setError(loadError ? "We couldn't load this service. Go back and try again." : 'This service no longer exists.');
       } else {
         setInitial({
           name: data.name,
@@ -53,14 +57,14 @@ export default function EditService() {
       })
       .eq('id', id);
 
-    if (saveError) throw new Error(saveError.message);
+    if (saveError) throw new Error("Couldn't save your changes. Check your connection and try again.");
 
     router.back();
   }
 
   function handleDelete() {
-    Alert.alert('Delete service', `Are you sure you want to delete "${initial?.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(`Delete ${initial?.name ?? 'this service'}?`, "Customers won't be able to book it any more.", [
+      { text: 'Keep it', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: deleteService },
     ]);
   }
@@ -77,7 +81,7 @@ export default function EditService() {
       setError(
         deleteError.code === '23503'
           ? "This service has bookings, so it can't be deleted."
-          : deleteError.message
+          : "Couldn't delete it. Check your connection and try again.",
       );
       return;
     }
@@ -118,7 +122,14 @@ export default function EditService() {
   );
 }
 
-const styles = StyleSheet.create({
-  deleteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.lg, marginTop: spacing.md },
-  deleteText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
-});
+const useStyles = makeStyles((colors) => ({
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+  },
+  deleteText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.danger },
+}));
