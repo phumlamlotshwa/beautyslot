@@ -1,7 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { MonthCalendar } from '../../../components/month-calendar';
 import { BusyTime, getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
@@ -15,6 +25,7 @@ type Booking = {
   starts_at: string;
   status: string;
   previous_starts_at: string | null;
+  requested_starts_at: string | null;
   travel_minutes: number;
   services: { name: string; duration_minutes: number } | null;
   customers: { first_name: string } | null;
@@ -29,6 +40,8 @@ type Hours = {
 };
 
 const MINUTE = 60 * 1000;
+const MAX_REASON = 300;
+const quickReasons = ['Fully booked that day', 'Running late', 'Not feeling well', 'Something came up'];
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -57,6 +70,7 @@ export default function SuggestNewTime() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [slots, setSlots] = useState<Date[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
+  const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,12 +83,16 @@ export default function SuggestNewTime() {
     async function loadBooking() {
       const { data, error: loadError } = await supabase
         .from('bookings')
-        .select('id, professional_id, staff_id, staff(name), starts_at, status, previous_starts_at, travel_minutes, services(name, duration_minutes), customers(first_name)')
+        .select(
+          'id, professional_id, staff_id, staff(name), starts_at, status, previous_starts_at, requested_starts_at, travel_minutes, services(name, duration_minutes), customers(first_name)',
+        )
         .eq('id', bookingId)
         .single();
 
       if (loadError || !data) {
-        setError(loadError ? "We couldn't load this booking. Go back and try again." : 'This booking no longer exists.');
+        setError(
+          loadError ? "We couldn't load this booking. Go back and try again." : 'This booking no longer exists.',
+        );
         setLoading(false);
         return;
       }
@@ -140,7 +158,13 @@ export default function SuggestNewTime() {
         const dayHours = hours.find((h) => h.day_of_week === d.getDay());
         if (!dayHours) continue;
 
-        const openSlots = getOpenSlots(d, dayHours.start_time.slice(0, 5), dayHours.end_time.slice(0, 5), duration, busy);
+        const openSlots = getOpenSlots(
+          d,
+          dayHours.start_time.slice(0, 5),
+          dayHours.end_time.slice(0, 5),
+          duration,
+          busy,
+        );
         if (openSlots.length > 0) available.add(d.toDateString());
       }
 
@@ -182,6 +206,11 @@ export default function SuggestNewTime() {
   async function handleSend() {
     if (!booking || !selectedSlot) return;
 
+    if (reason.trim() === '') {
+      setError('Add a reason so they know why.');
+      return;
+    }
+
     setError(null);
     setSaving(true);
 
@@ -198,6 +227,10 @@ export default function SuggestNewTime() {
         ends_at: endsAt.toISOString(),
         status: 'reschedule_proposed',
         previous_starts_at: originalTime,
+        change_reason: reason.trim(),
+        // Your suggestion replaces any time the customer asked for
+        requested_starts_at: null,
+        requested_ends_at: null,
       })
       .eq('id', booking.id);
 
@@ -221,7 +254,7 @@ export default function SuggestNewTime() {
     Alert.alert(
       'New time sent',
       `${name} can accept or decline ${formatDay(selectedSlot)} at ${formatTime(selectedSlot)}. You'll see their answer under Bookings.`,
-      [{ text: 'Done', onPress: () => router.back() }]
+      [{ text: 'Done', onPress: () => router.back() }],
     );
   }
 
@@ -243,85 +276,130 @@ export default function SuggestNewTime() {
 
   const currentTime = new Date(booking.starts_at);
   const customerName = booking.customers?.first_name ?? 'the customer';
+  const theyAsked = booking.requested_starts_at ? new Date(booking.requested_starts_at) : null;
 
   return (
-    <ScrollView style={ui.screen} contentContainerStyle={ui.content}>
-      <View style={styles.card}>
-        <Text style={styles.serviceName}>{booking.services?.name}</Text>
-        <View style={styles.line}>
-          <Ionicons name="person-outline" size={15} color={colors.textMuted} />
-          <Text style={styles.lineText}>{booking.customers?.first_name}</Text>
-        </View>
-        {booking.staff?.name ? (
+    <KeyboardAvoidingView style={ui.screen} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
+      <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.card}>
+          <Text style={styles.serviceName}>{booking.services?.name}</Text>
           <View style={styles.line}>
-            <Ionicons name="cut-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.lineText}>With {booking.staff.name}</Text>
+            <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.lineText}>{booking.customers?.first_name}</Text>
           </View>
-        ) : null}
-        <View style={styles.line}>
-          <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
-          <Text style={styles.lineText}>
-            Booked for {formatDay(currentTime)} at {formatTime(currentTime)}
-          </Text>
+          {booking.staff?.name ? (
+            <View style={styles.line}>
+              <Ionicons name="cut-outline" size={15} color={colors.textMuted} />
+              <Text style={styles.lineText}>With {booking.staff.name}</Text>
+            </View>
+          ) : null}
+          <View style={styles.line}>
+            <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.lineText}>
+              Booked for {formatDay(currentTime)} at {formatTime(currentTime)}
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <Text style={ui.sectionTitle}>Pick a new day</Text>
-      <MonthCalendar
-        month={visibleMonth}
-        minMonth={thisMonth}
-        selectedDate={selectedDate}
-        isAvailable={(date) => !loadingMonth && availableDays.has(date.toDateString())}
-        onSelectDate={selectDate}
-        onChangeMonth={changeMonth}
-      />
-      {loadingMonth && <ActivityIndicator style={{ marginTop: spacing.sm }} color={colors.accentDark} />}
+        {theyAsked && (
+          <View style={styles.notice}>
+            <Ionicons name="time-outline" size={16} color={colors.text} />
+            <Text style={styles.noticeText}>
+              {customerName} asked for {formatDay(theyAsked)} at {formatTime(theyAsked)}. Sending a different time
+              replaces their request.
+            </Text>
+          </View>
+        )}
 
-      {selectedDate && (
-        <>
-          <Text style={ui.sectionTitle}>Times on {formatDay(selectedDate)}</Text>
-          {slots.length === 0 ? (
-            <Text style={ui.muted}>This day is fully booked. Try another day.</Text>
-          ) : (
-            <View style={styles.slotGrid}>
-              {slots.map((slot) => {
-                const isSelected = selectedSlot?.getTime() === slot.getTime();
+        <Text style={ui.sectionTitle}>Pick a new day</Text>
+        <MonthCalendar
+          month={visibleMonth}
+          minMonth={thisMonth}
+          selectedDate={selectedDate}
+          isAvailable={(date) => !loadingMonth && availableDays.has(date.toDateString())}
+          onSelectDate={selectDate}
+          onChangeMonth={changeMonth}
+        />
+        {loadingMonth && <ActivityIndicator style={{ marginTop: spacing.sm }} color={colors.accentDark} />}
+
+        {selectedDate && (
+          <>
+            <Text style={ui.sectionTitle}>Times on {formatDay(selectedDate)}</Text>
+            {slots.length === 0 ? (
+              <Text style={ui.muted}>This day is fully booked. Try another day.</Text>
+            ) : (
+              <View style={styles.slotGrid}>
+                {slots.map((slot) => {
+                  const isSelected = selectedSlot?.getTime() === slot.getTime();
+                  return (
+                    <Pressable
+                      key={slot.getTime()}
+                      style={[styles.slotChip, isSelected && styles.slotChipSelected]}
+                      onPress={() => setSelectedSlot(slot)}
+                    >
+                      <Text style={[styles.slotText, isSelected && styles.slotTextSelected]}>{formatTime(slot)}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        )}
+
+        {!selectedSlot && error && <Text style={ui.error}>{error}</Text>}
+
+        {selectedSlot && (
+          <>
+            <Text style={ui.sectionTitle}>Why are you moving it?</Text>
+            <View style={styles.reasonChips}>
+              {quickReasons.map((r) => {
+                const isSelected = reason === r;
                 return (
-                  <Pressable
-                    key={slot.getTime()}
-                    style={[styles.slotChip, isSelected && styles.slotChipSelected]}
-                    onPress={() => setSelectedSlot(slot)}
-                  >
-                    <Text style={[styles.slotText, isSelected && styles.slotTextSelected]}>{formatTime(slot)}</Text>
+                  <Pressable key={r} style={[ui.chip, isSelected && ui.chipSelected]} onPress={() => setReason(r)}>
+                    <Text style={[ui.chipText, isSelected && ui.chipTextSelected]}>{r}</Text>
                   </Pressable>
                 );
               })}
             </View>
-          )}
-        </>
-      )}
+            <TextInput
+              style={[ui.input, styles.reasonInput]}
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Or write your own"
+              placeholderTextColor={colors.textFaint}
+              multiline
+              maxLength={MAX_REASON}
+              textAlignVertical="top"
+            />
+            <Text style={styles.counter}>
+              {reason.length}/{MAX_REASON}
+            </Text>
 
-      {error && <Text style={ui.error}>{error}</Text>}
-
-      {selectedSlot && (
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Moving from</Text>
-          <Text style={styles.oldTime}>
-            {formatDay(currentTime)} at {formatTime(currentTime)}
-          </Text>
-          <Text style={[styles.summaryLabel, { marginTop: spacing.md }]}>To</Text>
-          <Text style={styles.newTime}>
-            {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
-          </Text>
-          <Text style={styles.summaryHelp}>
-            The booking moves to this time now. If {customerName} declines, the booking is cancelled.
-          </Text>
-          <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleSend} disabled={saving}>
-            {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Send new time</Text>}
-          </Pressable>
-        </View>
-      )}
-    </ScrollView>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Moving from</Text>
+              <Text style={styles.oldTime}>
+                {formatDay(currentTime)} at {formatTime(currentTime)}
+              </Text>
+              <Text style={[styles.summaryLabel, { marginTop: spacing.md }]}>To</Text>
+              <Text style={styles.newTime}>
+                {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
+              </Text>
+              <Text style={styles.summaryHelp}>
+                The booking moves to this time now. If {customerName} declines, the booking is cancelled.
+              </Text>
+              {error && <Text style={ui.error}>{error}</Text>}
+              <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleSend} disabled={saving}>
+                {saving ? (
+                  <ActivityIndicator color={colors.onAccent} />
+                ) : (
+                  <Text style={ui.buttonText}>Send new time</Text>
+                )}
+              </Pressable>
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -330,14 +408,51 @@ const useStyles = makeStyles((colors) => ({
   serviceName: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginBottom: spacing.xs },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
+  notice: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  noticeText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text },
+  reasonChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  reasonInput: { minHeight: 90, paddingTop: 12 },
+  counter: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint, textAlign: 'right', marginTop: 4 },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  slotChip: { width: '31%', backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
+  slotChip: {
+    width: '31%',
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
   slotChipSelected: { backgroundColor: colors.accentDark },
   slotText: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.text },
   slotTextSelected: { color: colors.onAccent },
   summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: 28 },
-  summaryLabel: { fontFamily: fonts.semiBold, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.textFaint },
-  oldTime: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textDecorationLine: 'line-through', marginTop: 2 },
+  summaryLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: colors.textFaint,
+  },
+  oldTime: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
+    marginTop: 2,
+  },
   newTime: { fontFamily: fonts.extraBold, fontSize: 20, color: colors.text, marginTop: 2 },
-  summaryHelp: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.md, marginBottom: spacing.md },
+  summaryHelp: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
 }));

@@ -18,6 +18,7 @@ type Booking = {
   starts_at: string;
   previous_starts_at: string | null;
   requested_starts_at: string | null;
+  declined_starts_at: string | null;
   change_reason: string | null;
   status: BookingStatus;
   location_type: 'at_professional' | 'at_customer';
@@ -37,8 +38,6 @@ function formatBookingTime(iso: string) {
   return `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()} at ${time}`;
 }
 
-// A solo professional's one team member usually has their own name,
-// so only show "With ..." when the stylist is someone else.
 function stylistName(booking: Booking) {
   const staffName = booking.staff?.name?.trim();
   if (!staffName) return null;
@@ -63,7 +62,6 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Every section starts closed. Tap a heading to open it.
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
   function toggleSection(title: string) {
@@ -81,7 +79,9 @@ export default function MyBookings() {
   const loadBookings = useCallback(async () => {
     setError(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       setLoading(false);
@@ -91,7 +91,7 @@ export default function MyBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, previous_starts_at, requested_starts_at, change_reason, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)'
+        'id, starts_at, previous_starts_at, requested_starts_at, declined_starts_at, change_reason, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)',
       )
       .eq('customer_id', user.id)
       .order('starts_at', { ascending: true });
@@ -108,16 +108,14 @@ export default function MyBookings() {
     const now = Date.now();
     const needsAddress = loaded.filter(
       (b) =>
-        b.status === 'confirmed' &&
-        b.location_type === 'at_professional' &&
-        new Date(b.starts_at).getTime() >= now
+        b.status === 'confirmed' && b.location_type === 'at_professional' && new Date(b.starts_at).getTime() >= now,
     );
 
     const results = await Promise.all(
       needsAddress.map(async (b) => {
         const { data: addr } = await supabase.rpc('get_booking_address', { p_booking_id: b.id });
         return [b.id, (addr as string | null) ?? null] as const;
-      })
+      }),
     );
 
     setProAddresses(Object.fromEntries(results));
@@ -127,7 +125,7 @@ export default function MyBookings() {
   useFocusEffect(
     useCallback(() => {
       loadBookings();
-    }, [loadBookings])
+    }, [loadBookings]),
   );
 
   async function respond(booking: Booking, accept: boolean) {
@@ -150,14 +148,26 @@ export default function MyBookings() {
   }
 
   function handleDecline(booking: Booking) {
-    Alert.alert(
-      'Decline the new time?',
-      'Your booking will be cancelled. You can book a different time afterwards.',
-      [
-        { text: 'Go back', style: 'cancel' },
-        { text: 'Decline', style: 'destructive', onPress: () => respond(booking, false) },
-      ]
-    );
+    Alert.alert('Decline the new time?', 'This cancels your booking. You can always book again.', [
+      { text: 'Go back', style: 'cancel' },
+      { text: 'Decline', style: 'destructive', onPress: () => respond(booking, false) },
+    ]);
+  }
+
+  async function keepBooking(booking: Booking) {
+    setError(null);
+    setAnsweringId(booking.id);
+
+    const { error: keepError } = await supabase.rpc('dismiss_declined_change', { p_booking_id: booking.id });
+
+    setAnsweringId(null);
+
+    if (keepError) {
+      setError("Couldn't update that. Check your connection and try again.");
+      return;
+    }
+
+    loadBookings();
   }
 
   function openChangeTime(booking: Booking) {
@@ -187,35 +197,43 @@ export default function MyBookings() {
             loadBookings();
           },
         },
-      ]
+      ],
     );
   }
 
   const now = Date.now();
   const isFuture = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
-  // You asked to move this booking and are waiting for an answer
   const isMyRequest = (b: Booking) =>
     isFuture(b) && (b.status === 'pending' || b.status === 'confirmed') && !!b.requested_starts_at;
-  // The professional suggested a new time and is waiting for your answer
   const isTheirSuggestion = (b: Booking) => b.status === 'reschedule_proposed' && isFuture(b);
+  const isDeclined = (b: Booking) =>
+    isFuture(b) &&
+    (b.status === 'pending' || b.status === 'confirmed') &&
+    !b.requested_starts_at &&
+    !!b.declined_starts_at;
 
   const reschedules = bookings.filter((b) => isTheirSuggestion(b) || isMyRequest(b));
-  const confirmed = bookings.filter((b) => b.status === 'confirmed' && isFuture(b) && !isMyRequest(b));
-  const pending = bookings.filter((b) => b.status === 'pending' && isFuture(b) && !isMyRequest(b));
+  const declined = bookings.filter(isDeclined);
+  const confirmed = bookings.filter(
+    (b) => b.status === 'confirmed' && isFuture(b) && !isMyRequest(b) && !isDeclined(b),
+  );
+  const pending = bookings.filter((b) => b.status === 'pending' && isFuture(b) && !isMyRequest(b) && !isDeclined(b));
   const cancelled = bookings.filter((b) => b.status === 'cancelled').reverse();
   const history = bookings
     .filter(
       (b) =>
         b.status !== 'cancelled' &&
         !reschedules.includes(b) &&
+        !declined.includes(b) &&
         !confirmed.includes(b) &&
-        !pending.includes(b)
+        !pending.includes(b),
     )
     .reverse();
 
   const sections = [
     { title: 'Reschedules', items: reschedules, needsAction: reschedules.filter(isTheirSuggestion).length },
+    { title: 'Declined', items: declined, needsAction: declined.length },
     { title: 'Confirmed', items: confirmed, needsAction: 0 },
     { title: 'Pending', items: pending, needsAction: 0 },
     { title: 'Cancelled', items: cancelled, needsAction: 0 },
@@ -277,10 +295,13 @@ export default function MyBookings() {
           const faded = item.status === 'cancelled' || !future;
           const stylist = stylistName(item);
           const hasRequest = canCancel && !!item.requested_starts_at;
+          const wasDeclined = isDeclined(item);
           const proFirstName = item.professionals?.first_name ?? 'them';
           const badge = hasRequest
             ? { label: 'Change requested', color: colors.info, background: colors.infoSoft }
-            : status;
+            : wasDeclined
+              ? { label: 'Change declined', color: colors.danger, background: colors.dangerSoft }
+              : status;
 
           return (
             <View style={[styles.card, isProposal && styles.proposalCard, faded && styles.fadedCard]}>
@@ -316,14 +337,10 @@ export default function MyBookings() {
                     <Text style={styles.oldTime}>{formatBookingTime(item.previous_starts_at)}</Text>
                   </View>
                   <View style={styles.line}>
-                    <Ionicons name="arrow-forward" size={15} color={colors.info} />
+                    <Ionicons name="arrow-forward" size={15} color={colors.text} />
                     <Text style={styles.newTime}>{formatBookingTime(item.starts_at)}</Text>
                   </View>
-                  {item.change_reason ? (
-                    <Text style={styles.reasonText}>
-                      {proFirstName}’s reason: “{item.change_reason}”
-                    </Text>
-                  ) : null}
+                  {item.change_reason ? <Text style={styles.reasonText}>Reason: {item.change_reason}</Text> : null}
                 </>
               ) : (
                 <View style={styles.line}>
@@ -343,12 +360,18 @@ export default function MyBookings() {
 
               {hasRequest && item.requested_starts_at && (
                 <View style={styles.requestBox}>
-                  <Text style={styles.requestLabel}>You asked to move it to</Text>
-                  <Text style={styles.requestTime}>{formatBookingTime(item.requested_starts_at)}</Text>
-                  {item.change_reason ? <Text style={styles.requestReason}>“{item.change_reason}”</Text> : null}
-                  <Text style={styles.requestNote}>
-                    Waiting for {proFirstName} to answer. Until then, your booking stays at the time above.
+                  <Text style={styles.requestTime}>You asked for {formatBookingTime(item.requested_starts_at)}</Text>
+                  {item.change_reason ? <Text style={styles.requestReason}>Reason: {item.change_reason}</Text> : null}
+                  <Text style={styles.requestNote}>Waiting for {proFirstName} to reply.</Text>
+                </View>
+              )}
+
+              {wasDeclined && item.declined_starts_at && (
+                <View style={styles.requestBox}>
+                  <Text style={styles.requestTime}>
+                    {item.professionals?.first_name ?? 'They'} couldn't do {formatBookingTime(item.declined_starts_at)}.
                   </Text>
+                  <Text style={styles.requestNote}>Your booking is still on the time above. Keep it or cancel it.</Text>
                 </View>
               )}
 
@@ -391,7 +414,23 @@ export default function MyBookings() {
                 </View>
               )}
 
-              {!answering && canCancel && (
+              {!answering && wasDeclined && (
+                <>
+                  <View style={styles.actions}>
+                    <Pressable style={[styles.actionButton, styles.primary]} onPress={() => keepBooking(item)}>
+                      <Text style={styles.primaryText}>Keep it</Text>
+                    </Pressable>
+                    <Pressable style={[styles.actionButton, styles.danger]} onPress={() => handleCancel(item)}>
+                      <Text style={styles.dangerText}>Cancel booking</Text>
+                    </Pressable>
+                  </View>
+                  <Pressable style={styles.tryAgainLink} onPress={() => openChangeTime(item)}>
+                    <Text style={styles.tryAgainText}>Try a different time</Text>
+                  </Pressable>
+                </>
+              )}
+
+              {!answering && canCancel && !wasDeclined && (
                 <View style={styles.linkRow}>
                   <Pressable style={styles.changeButton} onPress={() => openChangeTime(item)}>
                     <Ionicons name="time-outline" size={16} color={colors.text} />
@@ -425,26 +464,59 @@ const useStyles = makeStyles((colors) => ({
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
   emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
-  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  emptyText: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
   card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
-  proposalCard: { borderColor: colors.info, borderWidth: 2 },
+  proposalCard: { borderColor: colors.accentDark, borderWidth: 1.5 },
   fadedCard: { opacity: 0.7 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   serviceName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
   badgeText: { fontFamily: fonts.semiBold, fontSize: 12 },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
-  oldTime: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textFaint, textDecorationLine: 'line-through' },
-  newTime: { flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.info },
-  reasonText: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.sm },
-  requestBox: { backgroundColor: colors.infoSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
-  requestLabel: { fontFamily: fonts.semiBold, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.info },
-  requestTime: { fontFamily: fonts.bold, fontSize: 15, color: colors.text, marginTop: 4 },
-  requestReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.sm },
-  requestNote: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.sm },
-  addressBox: { backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  oldTime: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.textFaint,
+    textDecorationLine: 'line-through',
+  },
+  newTime: { flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.text },
+  reasonText: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  requestBox: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  requestTime: { fontFamily: fonts.semiBold, fontSize: 14, lineHeight: 20, color: colors.text },
+  requestReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
+  requestNote: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: 4 },
+  addressBox: {
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
   addressLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
   addressText: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
   directionsButton: {
@@ -469,7 +541,13 @@ const useStyles = makeStyles((colors) => ({
   primaryText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.onAccent },
   danger: { borderColor: colors.danger, backgroundColor: colors.surface },
   dangerText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.danger },
-  linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.md },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
   changeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -481,6 +559,8 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: 14,
   },
   changeText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
+  tryAgainLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
+  tryAgainText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text, textDecorationLine: 'underline' },
   cancelLink: { paddingVertical: 4 },
   cancelText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.danger },
 }));

@@ -1,7 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { MonthCalendar } from '../../../components/month-calendar';
 import { BusyTime, getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
@@ -23,10 +33,9 @@ type Booking = {
 };
 
 const MINUTE = 60 * 1000;
-const MAX_REASON = 300;
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const quickReasons = ['Something came up', 'Running late', 'Not feeling well', 'Clashes with work'];
+const quickReasons = ['Something came up', 'Work clash', 'Not feeling well'];
 
 function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
@@ -69,13 +78,15 @@ export default function ChangeTime() {
       const { data, error: loadError } = await supabase
         .from('bookings')
         .select(
-          'id, starts_at, ends_at, status, requested_starts_at, services(name), professionals(first_name), staff(name, working_hours(day_of_week, start_time, end_time))'
+          'id, starts_at, ends_at, status, requested_starts_at, services(name), professionals(first_name), staff(name, working_hours(day_of_week, start_time, end_time))',
         )
         .eq('id', bookingId)
         .single();
 
       if (loadError || !data) {
-        setError(loadError ? "We couldn't load this booking. Go back and try again." : 'This booking no longer exists.');
+        setError(
+          loadError ? "We couldn't load this booking. Go back and try again." : 'This booking no longer exists.',
+        );
         setLoading(false);
         return;
       }
@@ -123,7 +134,13 @@ export default function ChangeTime() {
         const dayHours = hours.find((h) => h.day_of_week === d.getDay());
         if (!dayHours) continue;
 
-        const openSlots = getOpenSlots(d, dayHours.start_time.slice(0, 5), dayHours.end_time.slice(0, 5), duration, busy);
+        const openSlots = getOpenSlots(
+          d,
+          dayHours.start_time.slice(0, 5),
+          dayHours.end_time.slice(0, 5),
+          duration,
+          busy,
+        );
         if (openSlots.length > 0) available.add(d.toDateString());
       }
 
@@ -166,7 +183,7 @@ export default function ChangeTime() {
     if (!booking || !selectedSlot) return;
 
     if (reason.trim() === '') {
-      setError('Add a reason so they know why.');
+      setError('Let them know why you need to move it.');
       return;
     }
 
@@ -191,18 +208,14 @@ export default function ChangeTime() {
       } else if (sendError.code === 'P0001') {
         setError(sendError.message);
       } else {
-        setError("Your request didn't send. Check your connection and try again.");
+        setError("Couldn't send that. Check your connection and try again.");
       }
       return;
     }
 
     const name = booking.professionals?.first_name ?? 'They';
 
-    Alert.alert(
-      'Request sent',
-      `${name} can accept or decline ${formatDay(selectedSlot)} at ${formatTime(selectedSlot)}. Until then, your booking stays at its current time.`,
-      [{ text: 'Done', onPress: () => router.back() }]
-    );
+    Alert.alert('Sent', `${name} will get back to you.`, [{ text: 'OK', onPress: () => router.back() }]);
   }
 
   if (loading) {
@@ -225,14 +238,10 @@ export default function ChangeTime() {
 
   const currentTime = new Date(booking.starts_at);
   const alreadyAsked = booking.requested_starts_at ? new Date(booking.requested_starts_at) : null;
-  const proName = booking.professionals?.first_name ?? 'the professional';
+  const proName = booking.professionals?.first_name;
 
   return (
-    <KeyboardAvoidingView
-      style={ui.screen}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <KeyboardAvoidingView style={ui.screen} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <Stack.Screen options={{ title: 'Change time' }} />
       <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
@@ -255,7 +264,8 @@ export default function ChangeTime() {
           <View style={styles.notice}>
             <Ionicons name="time-outline" size={16} color={colors.text} />
             <Text style={styles.noticeText}>
-              You already asked for {formatDay(alreadyAsked)} at {formatTime(alreadyAsked)}. Sending a new request replaces it.
+              You've already asked for {formatDay(alreadyAsked)} at {formatTime(alreadyAsked)}. A new time will replace
+              it.
             </Text>
           </View>
         )}
@@ -297,7 +307,7 @@ export default function ChangeTime() {
 
         {selectedSlot && (
           <>
-            <Text style={ui.sectionTitle}>Why do you need to change it?</Text>
+            <Text style={ui.sectionTitle}>Reason</Text>
             <View style={styles.reasonChips}>
               {quickReasons.map((r) => {
                 const isSelected = reason === r;
@@ -312,33 +322,35 @@ export default function ChangeTime() {
               style={[ui.input, styles.reasonInput]}
               value={reason}
               onChangeText={setReason}
-              placeholder="Or write your own"
+              placeholder="Or type it here"
               placeholderTextColor={colors.textFaint}
               multiline
-              maxLength={MAX_REASON}
+              maxLength={300}
               textAlignVertical="top"
             />
-            <Text style={styles.counter}>
-              {reason.length}/{MAX_REASON}
-            </Text>
 
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Moving from</Text>
               <Text style={styles.oldTime}>
                 {formatDay(currentTime)} at {formatTime(currentTime)}
               </Text>
-              <Text style={[styles.summaryLabel, { marginTop: spacing.md }]}>To</Text>
-              <Text style={styles.newTime}>
-                {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
-              </Text>
+              <View style={styles.newTimeRow}>
+                <Ionicons name="arrow-forward" size={18} color={colors.text} />
+                <Text style={styles.newTime}>
+                  {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
+                </Text>
+              </View>
               <Text style={styles.summaryHelp}>
-                Your booking stays at its current time until {proName} accepts. If they decline, nothing changes.
+                Your current time stays until {proName ? `${proName} says` : 'they say'} yes.
               </Text>
 
               {error && <Text style={ui.error}>{error}</Text>}
 
               <Pressable style={[ui.button, sending && ui.buttonDisabled]} onPress={handleSend} disabled={sending}>
-                {sending ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Send request</Text>}
+                {sending ? (
+                  <ActivityIndicator color={colors.onAccent} />
+                ) : (
+                  <Text style={ui.buttonText}>Send request</Text>
+                )}
               </Pressable>
             </View>
           </>
@@ -365,16 +377,28 @@ const useStyles = makeStyles((colors) => ({
   },
   noticeText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  slotChip: { width: '31%', backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
+  slotChip: {
+    width: '31%',
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
   slotChipSelected: { backgroundColor: colors.accentDark },
   slotText: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.text },
   slotTextSelected: { color: colors.onAccent },
   reasonChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   reasonInput: { minHeight: 90, paddingTop: 12 },
-  counter: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint, textAlign: 'right', marginTop: 4 },
   summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.xl },
-  summaryLabel: { fontFamily: fonts.semiBold, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.textFaint },
-  oldTime: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textDecorationLine: 'line-through', marginTop: 2 },
-  newTime: { fontFamily: fonts.extraBold, fontSize: 20, color: colors.text, marginTop: 2 },
-  summaryHelp: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.md, marginBottom: spacing.md },
+  oldTime: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textDecorationLine: 'line-through' },
+  newTimeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
+  newTime: { flex: 1, fontFamily: fonts.extraBold, fontSize: 20, color: colors.text },
+  summaryHelp: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
 }));
