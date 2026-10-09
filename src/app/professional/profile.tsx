@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { Avatar } from '../../components/avatar';
 import { NameDialog } from '../../components/name-dialog';
 import { PhotoEditor } from '../../components/photo-editor';
 import { professionLabels } from '../../lib/format';
 import { deletePhoto, PhotoSource, pickPhoto, professionalPhotoUrl, uploadPhoto } from '../../lib/photos';
 import { supabase } from '../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../lib/theme';
-import { ui } from '../../lib/ui';
+import { fonts, radius, spacing } from '../../lib/theme';
+import { makeStyles, useTheme } from '../../lib/theme-context';
+import { useUi } from '../../lib/ui';
 
 const PER_CATALOGUE = 12;
 const MAX_CATALOGUES = 5;
@@ -27,6 +28,9 @@ function chooseSource(title: string, onPick: (source: PhotoSource) => void) {
 }
 
 export default function ProfessionalProfile() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [profession, setProfession] = useState('');
@@ -42,7 +46,9 @@ export default function ProfessionalProfile() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         setLoading(false);
         return;
@@ -50,7 +56,11 @@ export default function ProfessionalProfile() {
       setUserId(user.id);
 
       const [{ data: pro }, { data: cats }, { data: photos }] = await Promise.all([
-        supabase.from('professionals').select('first_name, last_name, profession, avatar_path').eq('id', user.id).single(),
+        supabase
+          .from('professionals')
+          .select('first_name, last_name, profession, avatar_path')
+          .eq('id', user.id)
+          .single(),
         supabase
           .from('portfolio_catalogues')
           .select('id, name')
@@ -77,8 +87,6 @@ export default function ProfessionalProfile() {
     load();
   }, []);
 
-  // ----- Profile photo -----
-
   async function changeAvatar(source: PhotoSource) {
     if (!userId) return;
     setError(null);
@@ -90,16 +98,19 @@ export default function ProfessionalProfile() {
       setBusy('avatar');
       const newPath = await uploadPhoto('professional-photos', userId, uri, 600);
 
-      const { error: saveError } = await supabase.from('professionals').update({ avatar_path: newPath }).eq('id', userId);
+      const { error: saveError } = await supabase
+        .from('professionals')
+        .update({ avatar_path: newPath })
+        .eq('id', userId);
       if (saveError) {
         await deletePhoto('professional-photos', newPath);
-        throw new Error(saveError.message);
+        throw new Error("Couldn't save your photo. Try again.");
       }
 
       if (avatarPath) await deletePhoto('professional-photos', avatarPath);
       setAvatarPath(newPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update your photo.');
+      setError(e instanceof Error ? e.message : "Couldn't update your photo. Try again.");
     } finally {
       setBusy(null);
     }
@@ -113,7 +124,7 @@ export default function ProfessionalProfile() {
     const { error: saveError } = await supabase.from('professionals').update({ avatar_path: null }).eq('id', userId);
 
     if (saveError) {
-      setError(saveError.message);
+      setError("Couldn't remove your photo. Try again.");
     } else {
       await deletePhoto('professional-photos', avatarPath);
       setAvatarPath(null);
@@ -123,7 +134,7 @@ export default function ProfessionalProfile() {
 
   function handleAvatarPress() {
     if (!avatarPath) {
-      chooseSource('Add a profile photo', changeAvatar);
+      chooseSource('Profile photo', changeAvatar);
       return;
     }
 
@@ -134,8 +145,6 @@ export default function ProfessionalProfile() {
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
-
-  // ----- Catalogues -----
 
   async function createCatalogue(catalogueName: string) {
     if (!userId) return;
@@ -148,7 +157,9 @@ export default function ProfessionalProfile() {
 
     if (saveError || !data) {
       throw new Error(
-        saveError?.code === '23505' ? 'You already have a catalogue with that name.' : saveError?.message ?? 'Could not create the catalogue.'
+        saveError?.code === '23505'
+          ? 'You already have a catalogue with that name.'
+          : "Couldn't create the catalogue. Try again.",
       );
     }
 
@@ -158,10 +169,15 @@ export default function ProfessionalProfile() {
   }
 
   async function renameCatalogue(catalogue: Catalogue, newName: string) {
-    const { error: saveError } = await supabase.from('portfolio_catalogues').update({ name: newName }).eq('id', catalogue.id);
+    const { error: saveError } = await supabase
+      .from('portfolio_catalogues')
+      .update({ name: newName })
+      .eq('id', catalogue.id);
 
     if (saveError) {
-      throw new Error(saveError.code === '23505' ? 'You already have a catalogue with that name.' : saveError.message);
+      throw new Error(
+        saveError.code === '23505' ? 'You already have a catalogue with that name.' : "Couldn't rename it. Try again.",
+      );
     }
 
     setCatalogues((current) => current.map((c) => (c.id === catalogue.id ? { ...c, name: newName } : c)));
@@ -172,12 +188,10 @@ export default function ProfessionalProfile() {
     const photos = work.filter((p) => p.catalogue_id === catalogue.id);
 
     Alert.alert(
-      `Delete "${catalogue.name}"?`,
-      photos.length > 0
-        ? `Its ${photos.length} photo${photos.length === 1 ? '' : 's'} will be deleted too.`
-        : 'This catalogue is empty.',
+      `Delete ${catalogue.name}?`,
+      photos.length > 0 ? `Its ${photos.length} photo${photos.length === 1 ? '' : 's'} will go too.` : undefined,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
@@ -190,7 +204,7 @@ export default function ProfessionalProfile() {
 
             const { error: deleteError } = await supabase.from('portfolio_catalogues').delete().eq('id', catalogue.id);
             if (deleteError) {
-              setError(deleteError.message);
+              setError("Couldn't delete the catalogue. Try again.");
               return;
             }
 
@@ -199,7 +213,7 @@ export default function ProfessionalProfile() {
             setSelected('other');
           },
         },
-      ]
+      ],
     );
   }
 
@@ -210,8 +224,6 @@ export default function ProfessionalProfile() {
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
-
-  // ----- Work photos -----
 
   async function addWorkPhoto(source: PhotoSource) {
     if (!userId) return;
@@ -232,13 +244,13 @@ export default function ProfessionalProfile() {
 
       if (saveError || !data) {
         await deletePhoto('professional-photos', path);
-        throw new Error(saveError?.message ?? 'Could not add the photo.');
+        throw new Error("Couldn't add the photo. Try again.");
       }
 
       setWork((current) => [data, ...current]);
       setEditing(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add the photo.');
+      setError(e instanceof Error ? e.message : "Couldn't add the photo. Try again.");
     } finally {
       setBusy(null);
     }
@@ -252,22 +264,22 @@ export default function ProfessionalProfile() {
       .update({ caption, catalogue_id: catalogueId })
       .eq('id', editing.id);
 
-    if (saveError) throw new Error(saveError.message);
+    if (saveError) throw new Error("Couldn't save that. Try again.");
 
     setWork((current) => current.map((p) => (p.id === editing.id ? { ...p, caption, catalogue_id: catalogueId } : p)));
     setEditing(null);
   }
 
   function removeWorkPhoto(photo: WorkPhoto) {
-    Alert.alert('Remove this photo?', 'Customers will no longer see it on your profile.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('Remove this photo?', undefined, [
+      { text: 'Keep', style: 'cancel' },
       {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
           const { error: deleteError } = await supabase.from('portfolio_photos').delete().eq('id', photo.id);
           if (deleteError) {
-            setError(deleteError.message);
+            setError("Couldn't remove the photo. Try again.");
             return;
           }
           await deletePhoto('professional-photos', photo.path);
@@ -298,7 +310,7 @@ export default function ProfessionalProfile() {
     ...(showOther ? [{ key: 'other' as Selected, label: 'Other', count: otherCount }] : []),
   ];
 
-  const activeKey: Selected = tabs.some((t) => t.key === selected) ? selected : tabs[0]?.key ?? 'other';
+  const activeKey: Selected = tabs.some((t) => t.key === selected) ? selected : (tabs[0]?.key ?? 'other');
   const activeTab = tabs.find((t) => t.key === activeKey);
   const shown = work.filter((p) => (activeKey === 'other' ? p.catalogue_id === null : p.catalogue_id === activeKey));
   const canAdd = shown.length < PER_CATALOGUE && work.length < PER_CATALOGUE * MAX_CATALOGUES;
@@ -318,11 +330,10 @@ export default function ProfessionalProfile() {
         </Pressable>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.profession}>{profession}</Text>
-        <Text style={styles.hint}>{avatarPath ? 'Tap your photo to change it' : 'Add a clear photo of your face'}</Text>
+        {!avatarPath && <Text style={styles.hint}>Add a photo of yourself</Text>}
       </View>
 
       <Text style={styles.sectionTitle}>My work</Text>
-      <Text style={ui.muted}>Group your photos into catalogues. Tap a photo to add a description.</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {tabs.map((t) => (
@@ -338,9 +349,9 @@ export default function ProfessionalProfile() {
           </Pressable>
         ))}
         {catalogues.length < MAX_CATALOGUES && (
-          <Pressable style={styles.newChip} onPress={() => setDialog({ mode: 'create' })}>
-            <Ionicons name="add" size={16} color={colors.accentDark} />
-            <Text style={styles.newChipText}>New catalogue</Text>
+          <Pressable style={[ui.chip, styles.newChip]} onPress={() => setDialog({ mode: 'create' })}>
+            <Ionicons name="add" size={16} color={colors.text} />
+            <Text style={ui.chipText}>New catalogue</Text>
           </Pressable>
         )}
       </ScrollView>
@@ -348,7 +359,7 @@ export default function ProfessionalProfile() {
       {activeTab?.catalogue && (
         <Pressable style={styles.optionsLink} onPress={() => handleCatalogueOptions(activeTab.catalogue!)}>
           <Ionicons name="ellipsis-horizontal" size={16} color={colors.textMuted} />
-          <Text style={styles.optionsText}>Rename or delete "{activeTab.label}"</Text>
+          <Text style={styles.optionsText}>Rename or delete</Text>
         </Pressable>
       )}
 
@@ -358,14 +369,14 @@ export default function ProfessionalProfile() {
         {canAdd && (
           <Pressable
             style={[styles.tile, styles.addTile]}
-            onPress={() => chooseSource('Add a photo of your work', addWorkPhoto)}
+            onPress={() => chooseSource('Add a photo', addWorkPhoto)}
             disabled={busy !== null}
           >
             {busy === 'work' ? (
               <ActivityIndicator color={colors.accentDark} />
             ) : (
               <>
-                <Ionicons name="add" size={28} color={colors.accentDark} />
+                <Ionicons name="add" size={28} color={colors.text} />
                 <Text style={styles.addText}>Add photo</Text>
               </>
             )}
@@ -374,7 +385,12 @@ export default function ProfessionalProfile() {
 
         {shown.map((photo) => (
           <Pressable key={photo.id} style={styles.tile} onPress={() => setEditing(photo)}>
-            <Image source={{ uri: professionalPhotoUrl(photo.path) ?? undefined }} style={styles.image} contentFit="cover" transition={150} />
+            <Image
+              source={{ uri: professionalPhotoUrl(photo.path) ?? undefined }}
+              style={styles.image}
+              contentFit="cover"
+              transition={150}
+            />
             {photo.caption ? (
               <View style={styles.captionBadge}>
                 <Ionicons name="text" size={12} color="#FFFFFF" />
@@ -386,7 +402,9 @@ export default function ProfessionalProfile() {
 
       {!canAdd && (
         <Text style={ui.help}>
-          {shown.length >= PER_CATALOGUE ? 'This catalogue is full (12 photos).' : 'You have reached the limit of 60 photos.'}
+          {shown.length >= PER_CATALOGUE
+            ? `This catalogue is full. It holds ${PER_CATALOGUE} photos.`
+            : `You've reached ${PER_CATALOGUE * MAX_CATALOGUES} photos, the most you can have.`}
         </Text>
       )}
 
@@ -415,22 +433,55 @@ export default function ProfessionalProfile() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   header: { alignItems: 'center', marginBottom: spacing.xl },
-  cameraBadge: { position: 'absolute', right: 0, bottom: 0, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.background },
+  cameraBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.accentDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.background,
+  },
   name: { fontFamily: fonts.bold, fontSize: 22, color: colors.text, marginTop: spacing.md },
-  profession: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark, marginTop: 2 },
+  profession: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginTop: 2 },
   hint: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: spacing.sm },
-  sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginBottom: spacing.xs },
-  tabs: { gap: spacing.sm, paddingVertical: spacing.lg },
-  newChip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.accentDark, borderRadius: radius.pill, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  newChipText: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
-  optionsLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: spacing.sm },
+  sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
+  tabs: { gap: spacing.sm, paddingVertical: spacing.md },
+  newChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  optionsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.sm,
+  },
   optionsText: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
-  tile: { width: '31.5%', aspectRatio: 1, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.accentSoft },
-  addTile: { alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.accentDark, backgroundColor: colors.surface },
-  addText: { fontFamily: fonts.medium, fontSize: 12, color: colors.accentDark, marginTop: 2 },
+  tile: {
+    width: '31.5%',
+    aspectRatio: 1,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.accentSoft,
+  },
+  addTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  addText: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.text, marginTop: 2 },
   image: { width: '100%', height: '100%' },
-  captionBadge: { position: 'absolute', left: 6, bottom: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0, 0, 0, 0.55)', alignItems: 'center', justifyContent: 'center' },
-});
+  captionBadge: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+}));
