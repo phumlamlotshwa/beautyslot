@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -8,7 +9,7 @@ import { MonthCalendar } from '../../../components/month-calendar';
 import { formatDuration, formatPrice, OfferedAt } from '../../../lib/format';
 import { getSavedAddresses, markAddressUsed, SavedAddress, saveAddress, shortAddress } from '../../../lib/location';
 import { Place } from '../../../lib/maps';
-import { professionalPhotoUrl } from '../../../lib/photos';
+import { deletePhoto, PhotoSource, pickPhoto, professionalPhotoUrl, uploadPhoto } from '../../../lib/photos';
 import { getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
 import { fonts, radius, spacing } from '../../../lib/theme';
@@ -24,6 +25,7 @@ type Service = {
   offered_at: OfferedAt;
 };
 
+type WorkPhoto = { id: number; path: string };
 type Hours = { day_of_week: number; start_time: string; end_time: string };
 type Member = { id: number; name: string; avatar_path: string | null; hours: Hours[] };
 type TeamBusy = { staff_id: number; starts_at: string; ends_at: string };
@@ -48,6 +50,9 @@ export default function BookService() {
   const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
   const [service, setService] = useState<Service | null>(null);
+  const [workPhotos, setWorkPhotos] = useState<WorkPhoto[]>([]);
+  const [refPhotoId, setRefPhotoId] = useState<number | null>(null);
+  const [ownPhotoUri, setOwnPhotoUri] = useState<string | null>(null);
   const [team, setTeam] = useState<Member[]>([]);
   const [choice, setChoice] = useState<Choice>('any');
   const [locationType, setLocationType] = useState<LocationType>('at_professional');
@@ -115,8 +120,16 @@ export default function BookService() {
         .sort((a, b) => a.created_at.localeCompare(b.created_at))
         .map((s) => ({ id: s.id, name: s.name, avatar_path: s.avatar_path, hours: s.working_hours ?? [] }));
 
+      const { data: photoData } = await supabase
+        .from('portfolio_photos')
+        .select('id, path')
+        .eq('professional_id', typedService.professional_id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      setWorkPhotos((photoData ?? []) as WorkPhoto[]);
+
       if (typedService.offered_at !== 'at_professional') {
-        // Start with the most recently used saved address, if there is one
         const saved = await getSavedAddresses();
         setSavedAddresses(saved);
         if (saved[0]) {
@@ -267,7 +280,6 @@ export default function BookService() {
     setAddress({ address: saved.address, lat: saved.lat, lng: saved.lng });
   }
 
-  // Saves the address typed in the box, with its name if given
   async function handleSaveAddress() {
     if (!address) return;
 
@@ -284,6 +296,32 @@ export default function BookService() {
     setSavedAddresses(await getSavedAddresses());
     setAddressLabel('');
     setAddressMessage('Saved. It will be ready next time you book.');
+  }
+
+  async function addOwnPhoto(source: PhotoSource) {
+    setError(null);
+    try {
+      const uri = await pickPhoto(source, false);
+      if (uri) {
+        setOwnPhotoUri(uri);
+        setRefPhotoId(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't open your photos.");
+    }
+  }
+
+  function handleAddOwnPhoto() {
+    Alert.alert('Add a photo', undefined, [
+      { text: 'Take a photo', onPress: () => addOwnPhoto('camera') },
+      { text: 'Choose from library', onPress: () => addOwnPhoto('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  function pickWorkPhoto(id: number) {
+    setOwnPhotoUri(null);
+    setRefPhotoId(refPhotoId === id ? null : id);
   }
 
   async function handleConfirm() {
@@ -306,6 +344,17 @@ export default function BookService() {
       return;
     }
 
+    let referencePath: string | null = null;
+    if (ownPhotoUri) {
+      try {
+        referencePath = await uploadPhoto('booking-photos', user.id, ownPhotoUri, 1200);
+      } catch {
+        setError("Your photo didn't upload. Try again, or book without it.");
+        setConfirming(false);
+        return;
+      }
+    }
+
     const startsAt = selectedSlot;
     const endsAt = new Date(selectedSlot.getTime() + service.duration_minutes * 60 * 1000);
     const freeStaff = slotStaff.get(selectedSlot.getTime()) ?? [];
@@ -325,6 +374,8 @@ export default function BookService() {
         address: isHome ? address!.address : null,
         address_lat: isHome ? address!.lat : null,
         address_lng: isHome ? address!.lng : null,
+        reference_photo_id: referencePath ? null : refPhotoId,
+        reference_path: referencePath,
       });
 
       if (!bookingError) {
@@ -338,6 +389,7 @@ export default function BookService() {
     }
 
     if (!bookedWith) {
+      if (referencePath) await deletePhoto('booking-photos', referencePath);
       setConfirming(false);
       if (!lastError || lastError.code === '23P01') {
         setError('Someone just booked that time. Pick another one.');
@@ -349,7 +401,6 @@ export default function BookService() {
       return;
     }
 
-    // Moves the saved address used for this booking to the top of the list
     if (isHome && matchingSaved) {
       markAddressUsed(matchingSaved.id);
     }
@@ -393,6 +444,53 @@ export default function BookService() {
             <Text style={styles.servicePrice}>{formatPrice(service.price)}</Text>
           </View>
         </View>
+
+        {team.length > 0 && (
+          <>
+            <Text style={ui.sectionTitle}>Show them what you want</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
+              {ownPhotoUri ? (
+                <View style={[styles.photoTile, styles.photoTileSelected]}>
+                  <Image source={{ uri: ownPhotoUri }} style={styles.photoImage} contentFit="cover" />
+                  <Pressable style={styles.removePhoto} onPress={() => setOwnPhotoUri(null)} hitSlop={8}>
+                    <Ionicons name="close" size={14} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable style={[styles.photoTile, styles.addPhotoTile]} onPress={handleAddOwnPhoto}>
+                  <Ionicons name="camera-outline" size={22} color={colors.text} />
+                  <Text style={styles.addPhotoText}>Your photo</Text>
+                </Pressable>
+              )}
+              {workPhotos.map((p) => {
+                const isSelected = refPhotoId === p.id;
+                return (
+                  <Pressable
+                    key={p.id}
+                    style={[styles.photoTile, isSelected && styles.photoTileSelected]}
+                    onPress={() => pickWorkPhoto(p.id)}
+                  >
+                    <Image
+                      source={{ uri: professionalPhotoUrl(p.path) ?? undefined }}
+                      style={styles.photoImage}
+                      contentFit="cover"
+                    />
+                    {isSelected && (
+                      <View style={styles.photoTick}>
+                        <Ionicons name="checkmark" size={14} color={colors.onAccent} />
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Text style={ui.help}>
+              {workPhotos.length > 0
+                ? 'Tap one of their photos, or add your own.'
+                : 'Add a photo of the look you want.'}
+            </Text>
+          </>
+        )}
 
         {team.length === 0 ? (
           <Text style={[ui.muted, { marginTop: spacing.xl }]}>Nobody is taking bookings for this service right now.</Text>
@@ -627,7 +725,9 @@ export default function BookService() {
             </View>
 
             <Text style={styles.requestNote}>
-              This sends a request. Your booking is confirmed once they accept it.
+              {ownPhotoUri || refPhotoId
+                ? "They'll look at your photo first. If it costs more, you'll be asked before it's confirmed."
+                : 'Your booking is confirmed once they accept it.'}
             </Text>
 
             <Pressable
@@ -712,5 +812,41 @@ const useStyles = makeStyles((colors) => ({
   totalRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.sm, paddingTop: spacing.sm },
   totalLabel: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   totalValue: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  photoRow: { gap: spacing.sm, paddingVertical: spacing.xs },
+  photoTile: {
+    width: 84,
+    height: 84,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.accentSoft,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  photoTileSelected: { borderColor: colors.accentDark },
+  photoImage: { width: '100%', height: '100%' },
+  addPhotoTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  addPhotoText: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.text, marginTop: 4 },
+  photoTick: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.accentDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removePhoto: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   requestNote: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.lg },
 }));
