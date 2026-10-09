@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, radius, spacing } from '../lib/theme';
+import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { fonts, radius, spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
 
 const ROW_HEIGHT = 50;
 
@@ -16,6 +17,8 @@ type Props<T> = {
 };
 
 export function SelectField<T>({ value, options, onChange, placeholder = 'Choose', title }: Props<T>) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [open, setOpen] = useState(false);
 
   const selectedIndex = options.findIndex((o) => o.value === value);
@@ -31,6 +34,7 @@ export function SelectField<T>({ value, options, onChange, placeholder = 'Choose
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)} />
         <View style={styles.sheet}>
+          <View style={styles.handle} />
           {title && <Text style={styles.title}>{title}</Text>}
           <FlatList
             data={options}
@@ -58,7 +62,7 @@ export function SelectField<T>({ value, options, onChange, placeholder = 'Choose
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -71,11 +75,26 @@ const styles = StyleSheet.create({
   },
   fieldText: { fontFamily: fonts.regular, fontSize: 16, color: colors.text },
   placeholder: { color: colors.textFaint },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)' },
-  sheet: { height: 360, backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingTop: spacing.lg },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  sheet: {
+    height: 380,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: spacing.lg,
+  },
   title: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
   option: { height: ROW_HEIGHT, justifyContent: 'center', alignItems: 'center' },
   optionSelected: { backgroundColor: colors.accentSoft },
   optionText: { fontFamily: fonts.regular, fontSize: 17, color: colors.text },
-  optionTextSelected: { fontFamily: fonts.bold, color: colors.accentDark },
-});
+  optionTextSelected: { fontFamily: fonts.bold, color: colors.text },
+}));
