@@ -2,12 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Toggle } from '../../../components/toggle';
 import { AddressInput } from '../../../components/address-input';
+import { Avatar } from '../../../components/avatar';
 import { MonthCalendar } from '../../../components/month-calendar';
+import { Toggle } from '../../../components/toggle';
 import { formatDuration, formatPrice, OfferedAt } from '../../../lib/format';
 import { Place } from '../../../lib/maps';
-import { BusyTime, getOpenSlots } from '../../../lib/slots';
+import { professionalPhotoUrl } from '../../../lib/photos';
+import { getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
 import { colors, fonts, radius, spacing } from '../../../lib/theme';
 import { ui } from '../../../lib/ui';
@@ -21,19 +23,12 @@ type Service = {
   offered_at: OfferedAt;
 };
 
-type Hours = {
-  day_of_week: number;
-  start_time: string;
-  end_time: string;
-};
-
-type Quote = {
-  fee: number;
-  km: number;
-  in_range: boolean;
-};
-
+type Hours = { day_of_week: number; start_time: string; end_time: string };
+type Member = { id: number; name: string; avatar_path: string | null; hours: Hours[] };
+type TeamBusy = { staff_id: number; starts_at: string; ends_at: string };
+type Quote = { fee: number; km: number; in_range: boolean };
 type LocationType = 'at_professional' | 'at_customer';
+type Choice = number | 'any';
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -49,7 +44,8 @@ export default function BookService() {
   const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
   const [service, setService] = useState<Service | null>(null);
-  const [hours, setHours] = useState<Hours[]>([]);
+  const [team, setTeam] = useState<Member[]>([]);
+  const [choice, setChoice] = useState<Choice>('any');
   const [locationType, setLocationType] = useState<LocationType>('at_professional');
   const [address, setAddress] = useState<Place | null>(null);
   const [savedAddress, setSavedAddress] = useState<Place | null>(null);
@@ -58,16 +54,31 @@ export default function BookService() {
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
-  const [monthBusy, setMonthBusy] = useState<BusyTime[]>([]);
+  const [monthBusy, setMonthBusy] = useState<TeamBusy[]>([]);
   const [availableDays, setAvailableDays] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [slots, setSlots] = useState<Date[]>([]);
+  const [slotStaff, setSlotStaff] = useState<Map<number, number[]>>(new Map());
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const candidates = choice === 'any' ? team : team.filter((m) => m.id === choice);
+
+  function slotsFor(member: Member, date: Date, busy: TeamBusy[]) {
+    const dayHours = member.hours.find((h) => h.day_of_week === date.getDay());
+    if (!service || !dayHours) return [];
+    return getOpenSlots(
+      date,
+      dayHours.start_time.slice(0, 5),
+      dayHours.end_time.slice(0, 5),
+      service.duration_minutes,
+      busy.filter((b) => b.staff_id === member.id)
+    );
+  }
 
   useEffect(() => {
     async function loadService() {
@@ -85,14 +96,18 @@ export default function BookService() {
 
       const typedService = serviceData as unknown as Service;
 
-      const { data: hoursData, error: hoursError } = await supabase
-        .from('working_hours')
-        .select('day_of_week, start_time, end_time')
-        .eq('professional_id', typedService.professional_id);
+      const { data: staffData, error: staffError } = await supabase
+        .from('staff_services')
+        .select('staff(id, name, avatar_path, is_active, created_at, working_hours(day_of_week, start_time, end_time))')
+        .eq('service_id', typedService.id);
 
-      if (hoursError) {
-        setError(hoursError.message);
-      }
+      if (staffError) setError(staffError.message);
+
+      const members: Member[] = ((staffData ?? []) as any[])
+        .map((row) => row.staff)
+        .filter((s) => s && s.is_active)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .map((s) => ({ id: s.id, name: s.name, avatar_path: s.avatar_path, hours: s.working_hours ?? [] }));
 
       if (typedService.offered_at !== 'at_professional') {
         const { data: { user } } = await supabase.auth.getUser();
@@ -113,8 +128,9 @@ export default function BookService() {
       }
 
       setLocationType(typedService.offered_at === 'at_customer' ? 'at_customer' : 'at_professional');
+      setTeam(members);
+      setChoice(members.length === 1 ? members[0].id : 'any');
       setService(typedService);
-      setHours(hoursData ?? []);
       setLoading(false);
     }
 
@@ -159,7 +175,7 @@ export default function BookService() {
   }, [service, locationType, address?.lat, address?.lng]);
 
   useEffect(() => {
-    if (!service) return;
+    if (!service || team.length === 0) return;
 
     let cancelled = false;
 
@@ -171,7 +187,7 @@ export default function BookService() {
       const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
       const monthEnd = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1);
 
-      const { data, error: busyError } = await supabase.rpc('get_busy_times', {
+      const { data, error: busyError } = await supabase.rpc('get_team_busy_times', {
         p_professional_id: service.professional_id,
         p_from: monthStart.toISOString(),
         p_to: monthEnd.toISOString(),
@@ -185,22 +201,11 @@ export default function BookService() {
         return;
       }
 
-      const busy = (data ?? []) as BusyTime[];
+      const busy = (data ?? []) as TeamBusy[];
       const available = new Set<string>();
 
       for (let d = new Date(monthStart); d < monthEnd; d.setDate(d.getDate() + 1)) {
-        const dayHours = hours.find((h) => h.day_of_week === d.getDay());
-        if (!dayHours) continue;
-
-        const openSlots = getOpenSlots(
-          d,
-          dayHours.start_time.slice(0, 5),
-          dayHours.end_time.slice(0, 5),
-          service.duration_minutes,
-          busy
-        );
-
-        if (openSlots.length > 0) {
+        if (candidates.some((m) => slotsFor(m, d, busy).length > 0)) {
           available.add(d.toDateString());
         }
       }
@@ -215,14 +220,24 @@ export default function BookService() {
     return () => {
       cancelled = true;
     };
-  }, [service, hours, visibleMonth, refreshKey]);
+  }, [service, team, choice, visibleMonth, refreshKey]);
 
-  function changeMonth(month: Date) {
-    setVisibleMonth(month);
+  function resetTimes() {
     setSelectedDate(null);
     setSelectedSlot(null);
     setSlots([]);
+    setSlotStaff(new Map());
     setError(null);
+  }
+
+  function changeMonth(month: Date) {
+    setVisibleMonth(month);
+    resetTimes();
+  }
+
+  function changeChoice(next: Choice) {
+    setChoice(next);
+    resetTimes();
   }
 
   function selectDate(date: Date) {
@@ -230,22 +245,16 @@ export default function BookService() {
     setSelectedSlot(null);
     setError(null);
 
-    const dayHours = hours.find((h) => h.day_of_week === date.getDay());
-
-    if (!service || !dayHours) {
-      setSlots([]);
-      return;
+    const map = new Map<number, number[]>();
+    for (const member of candidates) {
+      for (const slot of slotsFor(member, date, monthBusy)) {
+        const time = slot.getTime();
+        map.set(time, [...(map.get(time) ?? []), member.id]);
+      }
     }
 
-    setSlots(
-      getOpenSlots(
-        date,
-        dayHours.start_time.slice(0, 5),
-        dayHours.end_time.slice(0, 5),
-        service.duration_minutes,
-        monthBusy
-      )
-    );
+    setSlotStaff(map);
+    setSlots([...map.keys()].sort((a, b) => a - b).map((t) => new Date(t)));
   }
 
   const isHome = locationType === 'at_customer';
@@ -253,6 +262,7 @@ export default function BookService() {
   const total = Number(service?.price ?? 0) + callOutFee;
   const addressIsNew = !!address && address.address !== savedAddress?.address;
   const canConfirm = !isHome || (!!address && !!quote && quote.in_range && !quoting);
+  const chosenMember = choice === 'any' ? null : team.find((m) => m.id === choice) ?? null;
 
   async function handleConfirm() {
     if (!service || !selectedSlot) return;
@@ -276,29 +286,43 @@ export default function BookService() {
 
     const startsAt = selectedSlot;
     const endsAt = new Date(selectedSlot.getTime() + service.duration_minutes * 60 * 1000);
+    const freeStaff = slotStaff.get(selectedSlot.getTime()) ?? [];
 
-    const { error: bookingError } = await supabase.from('bookings').insert({
-      customer_id: user.id,
-      professional_id: service.professional_id,
-      service_id: service.id,
-      starts_at: startsAt.toISOString(),
-      ends_at: endsAt.toISOString(),
-      location_type: locationType,
-      address: isHome ? address!.address : null,
-      address_lat: isHome ? address!.lat : null,
-      address_lng: isHome ? address!.lng : null,
-    });
+    let bookedWith: Member | undefined;
+    let lastError: { code?: string; message: string } | null = null;
 
-    if (bookingError) {
+    for (const staffId of freeStaff) {
+      const { error: bookingError } = await supabase.from('bookings').insert({
+        customer_id: user.id,
+        professional_id: service.professional_id,
+        staff_id: staffId,
+        service_id: service.id,
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+        location_type: locationType,
+        address: isHome ? address!.address : null,
+        address_lat: isHome ? address!.lat : null,
+        address_lng: isHome ? address!.lng : null,
+      });
+
+      if (!bookingError) {
+        bookedWith = team.find((m) => m.id === staffId);
+        lastError = null;
+        break;
+      }
+
+      lastError = bookingError;
+      if (bookingError.code !== '23P01') break;
+    }
+
+    if (!bookedWith) {
       setConfirming(false);
-      if (bookingError.code === '23P01') {
+      if (!lastError || lastError.code === '23P01') {
         setError('Sorry, someone just booked that time. Please choose another.');
-        setSelectedDate(null);
-        setSelectedSlot(null);
-        setSlots([]);
+        resetTimes();
         setRefreshKey((k) => k + 1);
       } else {
-        setError(bookingError.message);
+        setError(lastError.message);
       }
       return;
     }
@@ -315,9 +339,11 @@ export default function BookService() {
 
     setConfirming(false);
 
+    const withWho = team.length > 1 ? ` with ${bookedWith.name}` : '';
+
     Alert.alert(
       'Booking requested',
-      `${service.name} on ${dayNames[startsAt.getDay()]} ${startsAt.getDate()} ${monthNames[startsAt.getMonth()]} at ${formatTime(startsAt)}${isHome ? ' at your home' : ''}. The professional will confirm it soon.`,
+      `${service.name}${withWho} on ${dayNames[startsAt.getDay()]} ${startsAt.getDate()} ${monthNames[startsAt.getMonth()]} at ${formatTime(startsAt)}${isHome ? ' at your home' : ''}. They'll confirm it soon.`,
       [{ text: 'OK', onPress: () => router.dismissTo('/customer') }]
     );
   }
@@ -338,12 +364,10 @@ export default function BookService() {
     );
   }
 
+  const nobodyHasHours = candidates.every((m) => m.hours.length === 0);
+
   return (
-    <KeyboardAvoidingView
-      style={ui.screen}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <KeyboardAvoidingView style={ui.screen} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <View style={styles.serviceCard}>
           <Text style={styles.serviceName}>{service.name}</Text>
@@ -354,97 +378,132 @@ export default function BookService() {
           </View>
         </View>
 
-        {service.offered_at === 'both' && (
-          <>
-            <Text style={ui.sectionTitle}>Where?</Text>
-            <View style={styles.row}>
-              <Pressable
-                style={[styles.placeCard, !isHome && styles.placeCardSelected]}
-                onPress={() => setLocationType('at_professional')}
-              >
-                <Ionicons name="storefront-outline" size={22} color={!isHome ? colors.accentDark : colors.textMuted} />
-                <Text style={[styles.placeText, !isHome && styles.placeTextSelected]}>At their place</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.placeCard, isHome && styles.placeCardSelected]}
-                onPress={() => setLocationType('at_customer')}
-              >
-                <Ionicons name="home-outline" size={22} color={isHome ? colors.accentDark : colors.textMuted} />
-                <Text style={[styles.placeText, isHome && styles.placeTextSelected]}>At my home</Text>
-              </Pressable>
-            </View>
-          </>
-        )}
-
-        {isHome && (
-          <>
-            <Text style={ui.sectionTitle}>Your address</Text>
-            <AddressInput value={address} onChange={setAddress} />
-            {addressIsNew && (
-              <View style={styles.saveRow}>
-                <Text style={styles.saveText}>Save as my home address</Text>
-                <Toggle value={saveAddress} onValueChange={setSaveAddress} />
-              </View>
-            )}
-
-            {quoting && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
-            {!quoting && quote && quote.in_range && (
-              <View style={styles.quoteBox}>
-                <Ionicons name="car-outline" size={18} color={colors.accentDark} />
-                <Text style={styles.quoteText}>
-                  Call-out fee: {formatPrice(quote.fee)} · about {quote.km} km
-                </Text>
-              </View>
-            )}
-            {!quoting && quote && !quote.in_range && (
-              <Text style={ui.error}>
-                Your address is about {quote.km} km away, outside the area this professional travels to.
-              </Text>
-            )}
-            {!quoting && quoteError && <Text style={ui.error}>{quoteError}</Text>}
-          </>
-        )}
-
-        <Text style={ui.sectionTitle}>Choose a date</Text>
-
-        {hours.length === 0 ? (
-          <Text style={ui.muted}>This professional hasn't set their working hours yet.</Text>
+        {team.length === 0 ? (
+          <Text style={[ui.muted, { marginTop: spacing.xl }]}>Nobody is taking bookings for this service right now.</Text>
         ) : (
           <>
-            <MonthCalendar
-              month={visibleMonth}
-              minMonth={thisMonth}
-              selectedDate={selectedDate}
-              isAvailable={(date) => !loadingMonth && availableDays.has(date.toDateString())}
-              onSelectDate={selectDate}
-              onChangeMonth={changeMonth}
-            />
-            {loadingMonth && <ActivityIndicator style={{ marginTop: spacing.sm }} color={colors.accentDark} />}
-          </>
-        )}
-
-        {selectedDate && (
-          <>
-            <Text style={ui.sectionTitle}>
-              Times on {dayNames[selectedDate.getDay()]} {selectedDate.getDate()} {monthNames[selectedDate.getMonth()]}
-            </Text>
-            {slots.length === 0 ? (
-              <Text style={ui.muted}>No open times on this day. Try another date.</Text>
-            ) : (
-              <View style={styles.slotGrid}>
-                {slots.map((slot) => {
-                  const isSelected = selectedSlot?.getTime() === slot.getTime();
-                  return (
+            {team.length > 1 && (
+              <>
+                <Text style={ui.sectionTitle}>Who would you like?</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.staffRow}>
+                  <Pressable
+                    style={[styles.staffChip, choice === 'any' && styles.staffChipSelected]}
+                    onPress={() => changeChoice('any')}
+                  >
+                    <View style={styles.anyIcon}>
+                      <Ionicons name="people-outline" size={18} color={colors.accentDark} />
+                    </View>
+                    <Text style={[styles.staffName, choice === 'any' && styles.staffNameSelected]}>Anyone available</Text>
+                  </Pressable>
+                  {team.map((m) => (
                     <Pressable
-                      key={slot.getTime()}
-                      style={[styles.slotChip, isSelected && styles.slotChipSelected]}
-                      onPress={() => setSelectedSlot(slot)}
+                      key={m.id}
+                      style={[styles.staffChip, choice === m.id && styles.staffChipSelected]}
+                      onPress={() => changeChoice(m.id)}
                     >
-                      <Text style={[styles.slotText, isSelected && styles.slotTextSelected]}>{formatTime(slot)}</Text>
+                      <Avatar name={m.name} url={professionalPhotoUrl(m.avatar_path)} size={32} />
+                      <Text style={[styles.staffName, choice === m.id && styles.staffNameSelected]}>{m.name}</Text>
                     </Pressable>
-                  );
-                })}
-              </View>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            {service.offered_at === 'both' && (
+              <>
+                <Text style={ui.sectionTitle}>Where?</Text>
+                <View style={styles.row}>
+                  <Pressable
+                    style={[styles.placeCard, !isHome && styles.placeCardSelected]}
+                    onPress={() => setLocationType('at_professional')}
+                  >
+                    <Ionicons name="storefront-outline" size={22} color={!isHome ? colors.accentDark : colors.textMuted} />
+                    <Text style={[styles.placeText, !isHome && styles.placeTextSelected]}>At their place</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.placeCard, isHome && styles.placeCardSelected]}
+                    onPress={() => setLocationType('at_customer')}
+                  >
+                    <Ionicons name="home-outline" size={22} color={isHome ? colors.accentDark : colors.textMuted} />
+                    <Text style={[styles.placeText, isHome && styles.placeTextSelected]}>At my home</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+
+            {isHome && (
+              <>
+                <Text style={ui.sectionTitle}>Your address</Text>
+                <AddressInput value={address} onChange={setAddress} />
+                {addressIsNew && (
+                  <View style={styles.saveRow}>
+                    <Text style={styles.saveText}>Save as my home address</Text>
+                    <Toggle value={saveAddress} onValueChange={setSaveAddress} />
+                  </View>
+                )}
+
+                {quoting && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
+                {!quoting && quote && quote.in_range && (
+                  <View style={styles.quoteBox}>
+                    <Ionicons name="car-outline" size={18} color={colors.accentDark} />
+                    <Text style={styles.quoteText}>
+                      Call-out fee: {formatPrice(quote.fee)} · about {quote.km} km
+                    </Text>
+                  </View>
+                )}
+                {!quoting && quote && !quote.in_range && (
+                  <Text style={ui.error}>
+                    Your address is about {quote.km} km away, outside the area this professional travels to.
+                  </Text>
+                )}
+                {!quoting && quoteError && <Text style={ui.error}>{quoteError}</Text>}
+              </>
+            )}
+
+            <Text style={ui.sectionTitle}>Choose a date</Text>
+
+            {nobodyHasHours ? (
+              <Text style={ui.muted}>
+                {chosenMember ? `${chosenMember.name} hasn't` : "They haven't"} set working hours yet.
+              </Text>
+            ) : (
+              <>
+                <MonthCalendar
+                  month={visibleMonth}
+                  minMonth={thisMonth}
+                  selectedDate={selectedDate}
+                  isAvailable={(date) => !loadingMonth && availableDays.has(date.toDateString())}
+                  onSelectDate={selectDate}
+                  onChangeMonth={changeMonth}
+                />
+                {loadingMonth && <ActivityIndicator style={{ marginTop: spacing.sm }} color={colors.accentDark} />}
+              </>
+            )}
+
+            {selectedDate && (
+              <>
+                <Text style={ui.sectionTitle}>
+                  Times on {dayNames[selectedDate.getDay()]} {selectedDate.getDate()} {monthNames[selectedDate.getMonth()]}
+                </Text>
+                {slots.length === 0 ? (
+                  <Text style={ui.muted}>No open times on this day. Try another date.</Text>
+                ) : (
+                  <View style={styles.slotGrid}>
+                    {slots.map((slot) => {
+                      const isSelected = selectedSlot?.getTime() === slot.getTime();
+                      return (
+                        <Pressable
+                          key={slot.getTime()}
+                          style={[styles.slotChip, isSelected && styles.slotChipSelected]}
+                          onPress={() => setSelectedSlot(slot)}
+                        >
+                          <Text style={[styles.slotText, isSelected && styles.slotTextSelected]}>{formatTime(slot)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </>
             )}
           </>
         )}
@@ -454,6 +513,14 @@ export default function BookService() {
         {selectedSlot && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>{service.name}</Text>
+            {team.length > 1 && (
+              <View style={styles.summaryLine}>
+                <Ionicons name="person-outline" size={16} color={colors.textMuted} />
+                <Text style={styles.summaryText}>
+                  {chosenMember ? `With ${chosenMember.name}` : 'With whoever is free at that time'}
+                </Text>
+              </View>
+            )}
             <View style={styles.summaryLine}>
               <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
               <Text style={styles.summaryText}>
@@ -502,6 +569,12 @@ const styles = StyleSheet.create({
   serviceMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   serviceMetaText: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, flex: 1 },
   servicePrice: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  staffRow: { gap: spacing.sm, paddingVertical: spacing.xs },
+  staffChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingVertical: 6, paddingLeft: 6, paddingRight: spacing.lg },
+  staffChipSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accentDark },
+  anyIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  staffName: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
+  staffNameSelected: { color: colors.accentDark },
   row: { flexDirection: 'row', gap: spacing.md },
   placeCard: { flex: 1, alignItems: 'center', gap: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.lg },
   placeCardSelected: { backgroundColor: colors.accentSoft, borderColor: colors.accentDark },
