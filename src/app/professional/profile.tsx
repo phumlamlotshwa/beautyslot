@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'rea
 import { Avatar } from '../../components/avatar';
 import { NameDialog } from '../../components/name-dialog';
 import { PhotoEditor } from '../../components/photo-editor';
+import { ThemePicker } from '../../components/theme-picker';
 import { professionLabels } from '../../lib/format';
 import { deletePhoto, PhotoSource, pickPhoto, professionalPhotoUrl, uploadPhoto } from '../../lib/photos';
 import { supabase } from '../../lib/supabase';
@@ -407,6 +408,8 @@ export default function ProfessionalProfile() {
             : `You've reached ${PER_CATALOGUE * MAX_CATALOGUES} photos, the most you can have.`}
         </Text>
       )}
+
+      <ThemePicker />
 
       <NameDialog
         visible={dialog !== null}

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { AddressInput } from '../../components/address-input';
 import { Avatar } from '../../components/avatar';
+import { ThemePicker } from '../../components/theme-picker';
 import { deleteAddress, getSavedAddresses, SavedAddress, saveAddress, shortAddress } from '../../lib/location';
 import { Place } from '../../lib/maps';
 import { customerPhotoUrls, deletePhoto, PhotoSource, pickPhoto, uploadPhoto } from '../../lib/photos';
@@ -304,6 +305,8 @@ export default function CustomerProfile() {
             </Pressable>
           )}
         </View>
+
+        <ThemePicker />
       </ScrollView>
     </KeyboardAvoidingView>
   );
