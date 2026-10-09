@@ -56,6 +56,15 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
     return () => clearTimeout(timer);
   }, [query, value]);
 
+  function clear() {
+    latestQuery.current = '';
+    setQuery('');
+    setSuggestions([]);
+    setSearching(false);
+    setError(null);
+    if (value) onChange(null);
+  }
+
   function handleChangeText(text: string) {
     setQuery(text);
     if (value) onChange(null);
@@ -89,7 +98,15 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
           placeholderTextColor={colors.textFaint}
           autoCorrect={false}
         />
-        {(searching || choosing) && <ActivityIndicator style={styles.spinner} color={colors.text} />}
+        {searching || choosing ? (
+          <ActivityIndicator style={styles.spinner} color={colors.text} />
+        ) : (
+          query.length > 0 && (
+            <Pressable style={styles.clearButton} onPress={clear} hitSlop={10}>
+              <Ionicons name="close-circle" size={20} color={colors.textFaint} />
+            </Pressable>
+          )
+        )}
       </View>
 
       {value && (
@@ -120,6 +137,7 @@ const useStyles = makeStyles((colors) => ({
   searchIcon: { position: 'absolute', left: 12, zIndex: 1 },
   input: { flex: 1, paddingLeft: 38, paddingRight: 40 },
   spinner: { position: 'absolute', right: 12 },
+  clearButton: { position: 'absolute', right: 10 },
   confirmedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
   confirmed: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
   list: { backgroundColor: colors.surface, borderRadius: radius.sm, marginTop: spacing.xs, overflow: 'hidden' },
