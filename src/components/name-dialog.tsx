@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, fonts, radius, spacing } from '../lib/theme';
-import { ui } from '../lib/ui';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { fonts, radius, spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
+import { useUi } from '../lib/ui';
 
 type Props = {
   visible: boolean;
@@ -13,6 +23,9 @@ type Props = {
 };
 
 export function NameDialog({ visible, title, initial = '', submitLabel, onCancel, onSubmit }: Props) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [name, setName] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +39,7 @@ export function NameDialog({ visible, title, initial = '', submitLabel, onCancel
 
   async function handleSubmit() {
     if (!name.trim()) {
-      setError('Please enter a name.');
+      setError('Give it a name.');
       return;
     }
 
@@ -36,7 +49,7 @@ export function NameDialog({ visible, title, initial = '', submitLabel, onCancel
     try {
       await onSubmit(name.trim());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
+      setError(e instanceof Error ? e.message : "Couldn't save. Try again.");
     } finally {
       setSaving(false);
     }
@@ -55,6 +68,8 @@ export function NameDialog({ visible, title, initial = '', submitLabel, onCancel
             placeholderTextColor={colors.textFaint}
             maxLength={40}
             autoFocus
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
           />
           {error && <Text style={ui.error}>{error}</Text>}
 
@@ -63,7 +78,11 @@ export function NameDialog({ visible, title, initial = '', submitLabel, onCancel
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
             <Pressable style={[styles.submit, saving && ui.buttonDisabled]} onPress={handleSubmit} disabled={saving}>
-              {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.submitText}>{submitLabel}</Text>}
+              {saving ? (
+                <ActivityIndicator color={colors.onAccent} />
+              ) : (
+                <Text style={styles.submitText}>{submitLabel}</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -72,13 +91,19 @@ export function NameDialog({ visible, title, initial = '', submitLabel, onCancel
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)', justifyContent: 'center', padding: spacing.xl },
-  dialog: { backgroundColor: colors.background, borderRadius: radius.lg, padding: spacing.xl },
+const useStyles = makeStyles((colors) => ({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', padding: spacing.xl },
+  dialog: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.xl },
   title: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginBottom: spacing.md },
   buttons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xl },
-  cancel: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center', backgroundColor: colors.surface },
-  cancelText: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
-  submit: { flex: 1, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center', backgroundColor: colors.accentDark },
-  submitText: { fontFamily: fonts.medium, fontSize: 15, color: colors.onAccent },
-});
+  cancel: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+  },
+  cancelText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
+  submit: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center', backgroundColor: colors.accentDark },
+  submitText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.onAccent },
+}));
