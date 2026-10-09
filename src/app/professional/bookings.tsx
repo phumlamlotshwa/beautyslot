@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, SectionList, Text, View } from 'react-native';
 import { Avatar } from '../../components/avatar';
 import { ConfirmHomeVisit } from '../../components/confirm-home-visit';
 import { CountBadge } from '../../components/count-badge';
+import { PhotoViewer } from '../../components/photo-viewer';
+import { PriceSheet } from '../../components/price-sheet';
 import { formatPrice } from '../../lib/format';
-import { customerPhotoUrls } from '../../lib/photos';
+import { customerPhotoUrls, professionalPhotoUrl } from '../../lib/photos';
 import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
 import { fonts, radius, spacing } from '../../lib/theme';
@@ -27,6 +30,10 @@ type Booking = {
   travel_minutes: number;
   requested_starts_at: string | null;
   change_reason: string | null;
+  reference_photo_id: number | null;
+  reference_path: string | null;
+  agreed_price: number | null;
+  proposed_price: number | null;
   services: { name: string; price: number } | null;
   customers: { first_name: string; last_name: string; avatar_path: string | null } | null;
 };
@@ -50,6 +57,10 @@ export default function ProfessionalBookings() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
+  const [pricing, setPricing] = useState<Booking | null>(null);
+  const [chosenPrice, setChosenPrice] = useState<number | null>(null);
+  const [referenceUrls, setReferenceUrls] = useState<Record<number, string>>({});
+  const [viewing, setViewing] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +91,7 @@ export default function ProfessionalBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, requested_starts_at, change_reason, services(name, price), customers(first_name, last_name, avatar_path)',
+        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, requested_starts_at, change_reason, reference_photo_id, reference_path, agreed_price, proposed_price, services(name, price), customers(first_name, last_name, avatar_path)',
       )
       .eq('professional_id', user.id)
       .order('starts_at', { ascending: true });
@@ -91,10 +102,40 @@ export default function ProfessionalBookings() {
       const list = (data ?? []) as unknown as Booking[];
       setBookings(list);
       setCustomerAvatars(await customerPhotoUrls(list.map((b) => b.customers?.avatar_path)));
+      setReferenceUrls(await loadReferenceUrls(list));
     }
 
     setLoading(false);
   }, []);
+
+  async function loadReferenceUrls(list: Booking[]) {
+    const urls: Record<number, string> = {};
+
+    const photoIds = list.filter((b) => b.reference_photo_id).map((b) => b.reference_photo_id!);
+    if (photoIds.length > 0) {
+      const { data } = await supabase.from('portfolio_photos').select('id, path').in('id', photoIds);
+      const paths = new Map<number, string>((data ?? []).map((p: { id: number; path: string }) => [p.id, p.path]));
+      for (const b of list) {
+        const path = b.reference_photo_id ? paths.get(b.reference_photo_id) : null;
+        const url = path ? professionalPhotoUrl(path) : null;
+        if (url) urls[b.id] = url;
+      }
+    }
+
+    const withOwn = list.filter((b) => b.reference_path);
+    if (withOwn.length > 0) {
+      const { data } = await supabase.storage.from('booking-photos').createSignedUrls(
+        withOwn.map((b) => b.reference_path!),
+        60 * 60,
+      );
+      withOwn.forEach((b, i) => {
+        const url = data?.[i]?.signedUrl;
+        if (url) urls[b.id] = url;
+      });
+    }
+
+    return urls;
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -118,12 +159,19 @@ export default function ProfessionalBookings() {
     loadBookings();
   }
 
+  function priceChanges(booking: Booking, price: number | null) {
+    const usual = Number(booking.services?.price ?? 0);
+    if (price === null || price === usual) return { status: 'confirmed', agreed_price: null };
+    if (price < usual) return { status: 'confirmed', agreed_price: price };
+    return { proposed_price: price };
+  }
+
   async function confirmHomeVisit(travelMinutes: number) {
     if (!homeVisit) return;
 
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({ status: 'confirmed', travel_minutes: travelMinutes })
+      .update({ ...priceChanges(homeVisit, chosenPrice), travel_minutes: travelMinutes })
       .eq('id', homeVisit.id);
 
     if (updateError) {
@@ -132,15 +180,41 @@ export default function ProfessionalBookings() {
           'With that travel buffer, this visit overlaps another booking. Try a shorter buffer, or suggest a new time.',
         );
       }
-      throw new Error(updateError.message);
+      throw new Error("Couldn't confirm it. Check your connection and try again.");
     }
 
     setHomeVisit(null);
+    setChosenPrice(null);
+    loadBookings();
+  }
+
+  async function confirmWithPrice(price: number) {
+    if (!pricing) return;
+    const booking = pricing;
+
+    if (booking.location_type === 'at_customer') {
+      setChosenPrice(price);
+      setPricing(null);
+      setHomeVisit(booking);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('bookings')
+      .update(priceChanges(booking, price))
+      .eq('id', booking.id);
+
+    if (updateError) throw new Error("Couldn't confirm it. Check your connection and try again.");
+
+    setPricing(null);
     loadBookings();
   }
 
   function handleConfirm(booking: Booking) {
-    if (booking.location_type === 'at_customer') {
+    if (referenceUrls[booking.id] || booking.reference_photo_id || booking.reference_path) {
+      setPricing(booking);
+    } else if (booking.location_type === 'at_customer') {
+      setChosenPrice(null);
       setHomeVisit(booking);
     } else {
       updateStatus(booking, 'confirmed');
@@ -201,7 +275,10 @@ export default function ProfessionalBookings() {
   const hasChangeRequest = (b: Booking) =>
     isFuture(b) && (b.status === 'pending' || b.status === 'confirmed') && !!b.requested_starts_at;
 
-  const needsAnswer = (b: Booking) => (b.status === 'pending' && isFuture(b)) || hasChangeRequest(b);
+  const waitingOnPrice = (b: Booking) => b.status === 'pending' && b.proposed_price !== null;
+
+  const needsAnswer = (b: Booking) =>
+    (b.status === 'pending' && isFuture(b) && !waitingOnPrice(b)) || hasChangeRequest(b);
 
   const team = [...new Map(bookings.filter((b) => b.staff).map((b) => [b.staff_id, b.staff!.name])).entries()].map(
     ([id, name]) => ({ id, name }),
@@ -223,7 +300,7 @@ export default function ProfessionalBookings() {
     .reverse();
 
   const sections = [
-    { title: 'New', items: newRequests, needsAction: newRequests.length },
+    { title: 'New', items: newRequests, needsAction: newRequests.filter((b) => !waitingOnPrice(b)).length },
     { title: 'Reschedules', items: reschedules, needsAction: reschedules.filter(hasChangeRequest).length },
     { title: 'Confirmed', items: confirmed, needsAction: 0 },
     { title: 'Cancelled', items: cancelled, needsAction: 0 },
@@ -302,9 +379,13 @@ export default function ProfessionalBookings() {
           const future = isFuture(item);
           const busy = updatingId === item.id;
           const isHome = item.location_type === 'at_customer';
-          const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
+          const usualPrice = Number(item.services?.price ?? 0);
+          const servicePrice = item.agreed_price !== null ? Number(item.agreed_price) : usualPrice;
+          const total = servicePrice + Number(item.call_out_fee);
           const changeRequested = hasChangeRequest(item);
-          const isNew = item.status === 'pending' && future && !changeRequested;
+          const priceWaiting = waitingOnPrice(item) && future;
+          const isNew = item.status === 'pending' && future && !changeRequested && !priceWaiting;
+          const referenceUrl = referenceUrls[item.id];
           const customerName = item.customers?.first_name ?? 'The customer';
           const badge = changeRequested
             ? { label: 'Change requested', color: colors.info, background: colors.infoSoft }
@@ -359,6 +440,27 @@ export default function ProfessionalBookings() {
                 </View>
               )}
 
+              {referenceUrl && (
+                <Pressable style={styles.referenceRow} onPress={() => setViewing(referenceUrl)}>
+                  <Image source={{ uri: referenceUrl }} style={styles.referenceImage} contentFit="cover" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.referenceTitle}>
+                      {item.reference_path ? `${customerName}'s photo` : 'From your work'}
+                    </Text>
+                    <Text style={styles.referenceHint}>Tap to see it bigger</Text>
+                  </View>
+                </Pressable>
+              )}
+
+              {priceWaiting && item.proposed_price !== null && (
+                <View style={styles.requestBox}>
+                  <Text style={styles.requestTime}>
+                    You asked for {formatPrice(item.proposed_price)} (usually {formatPrice(usualPrice)})
+                  </Text>
+                  <Text style={styles.requestReason}>Waiting for {customerName} to reply.</Text>
+                </View>
+              )}
+
               {changeRequested && item.requested_starts_at && (
                 <View style={styles.requestBox}>
                   <Text style={styles.requestTime}>
@@ -379,6 +481,9 @@ export default function ProfessionalBookings() {
 
               <View style={styles.priceRow}>
                 <Text style={styles.price}>{formatPrice(total)}</Text>
+                {item.agreed_price !== null && Number(item.agreed_price) !== usualPrice && (
+                  <Text style={styles.priceNote}>usually {formatPrice(usualPrice)}</Text>
+                )}
                 {isHome && Number(item.call_out_fee) > 0 && (
                   <Text style={styles.priceNote}>incl. {formatPrice(item.call_out_fee)} call-out</Text>
                 )}
@@ -444,12 +549,29 @@ export default function ProfessionalBookings() {
         }}
       />
 
+      <PriceSheet
+        visible={pricing !== null}
+        customerName={pricing?.customers?.first_name ?? 'They'}
+        usualPrice={Number(pricing?.services?.price ?? 0)}
+        onCancel={() => setPricing(null)}
+        onConfirm={confirmWithPrice}
+      />
+
+      <PhotoViewer
+        photos={viewing ? [{ id: 0, url: viewing, caption: null }] : []}
+        startIndex={viewing ? 0 : null}
+        onClose={() => setViewing(null)}
+      />
+
       {homeVisit && homeVisit.address_lat !== null && homeVisit.address_lng !== null && (
         <ConfirmHomeVisit
           visible
           address={homeVisit.address ?? ''}
           destination={{ lat: homeVisit.address_lat, lng: homeVisit.address_lng }}
-          onCancel={() => setHomeVisit(null)}
+          onCancel={() => {
+            setHomeVisit(null);
+            setChosenPrice(null);
+          }}
           onConfirm={confirmHomeVisit}
         />
       )}
@@ -501,6 +623,18 @@ const useStyles = makeStyles((colors) => ({
   homeTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
   homeAddress: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
   homeDetail: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
+  referenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginTop: spacing.md,
+  },
+  referenceImage: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.accentSoft },
+  referenceTitle: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
+  referenceHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 2 },
   requestBox: {
     backgroundColor: colors.accentSoft,
     borderRadius: radius.sm,
