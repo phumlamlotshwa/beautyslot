@@ -1,6 +1,3 @@
-// BeautySlot colours. Light and dark use the same names, so a screen
-// can switch between them without changing anything else.
-
 export const lightColors = {
   background: '#EFEFEF',
   surface: '#FFFFFF',
@@ -61,8 +58,6 @@ export const darkColors: Colors = {
   completedSoft: '#1B2A3B',
 };
 
-// Screens that haven't been switched to useStyles() yet read this one.
-// It stays light until each screen is converted.
 export const colors = lightColors;
 
 export const fonts = {

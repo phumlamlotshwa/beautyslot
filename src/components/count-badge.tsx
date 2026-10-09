@@ -6,8 +6,6 @@ type Props = {
   count: number;
 };
 
-// A small red circle with a number, e.g. on the Bookings button.
-// Shows nothing when the count is 0.
 export function CountBadge({ count }: Props) {
   const styles = useStyles();
 

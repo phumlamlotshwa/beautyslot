@@ -10,8 +10,6 @@ import { CountBadge } from './count-badge';
 
 type Props = {
   style?: StyleProp<ViewStyle>;
-  // 'row': icon, word and number side by side (customer home)
-  // 'tile': icon above the word, number in the top corner (professional home)
   variant?: 'row' | 'tile';
 };
 

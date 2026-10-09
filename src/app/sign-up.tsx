@@ -36,7 +36,6 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Says exactly what's missing, one thing at a time, top to bottom
   function findProblem() {
     if (role === 'professional' && !profession) return 'Choose what you do.';
     if (!firstName.trim()) return 'Add your first name.';

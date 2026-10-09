@@ -100,7 +100,6 @@ export function LocationBar({ value, onChange }: Props) {
     ]);
   }
 
-  // Saves the searched address (with its name, if given) and shows it in the list
   async function saveSearched() {
     if (!searchPlace) return;
 
@@ -122,7 +121,6 @@ export function LocationBar({ value, onChange }: Props) {
     loadSaved();
   }
 
-  // Uses the searched address without saving it
   function useSearched() {
     if (!searchPlace) return;
 

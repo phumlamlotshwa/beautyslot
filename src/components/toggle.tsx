@@ -9,8 +9,6 @@ type Props = {
 export function Toggle({ value, onValueChange }: Props) {
   const { colors, scheme } = useTheme();
 
-  // In dark mode the "on" track is white, so the round knob turns black
-  // when it's on. Otherwise you'd have a white knob on a white track.
   const knob = scheme === 'dark' && value ? '#000000' : '#FFFFFF';
 
   return (

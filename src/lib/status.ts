@@ -4,8 +4,6 @@ export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed' 
 
 type StatusStyle = { label: string; color: string; background: string };
 
-// Pass the screen's colours (from useTheme) so the label matches light or dark.
-// Screens that don't pass them yet get the light colours, like before.
 export function statusStyle(
   status: BookingStatus,
   viewer: 'customer' | 'professional',

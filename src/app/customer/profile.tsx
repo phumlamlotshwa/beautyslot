@@ -130,8 +130,6 @@ export default function CustomerProfile() {
     Alert.alert('Profile photo', undefined, options);
   }
 
-  // Opens the add box and scrolls it up, so the search and its
-  // suggestions aren't hidden behind the keyboard
   function startAdding() {
     setAdding(true);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);

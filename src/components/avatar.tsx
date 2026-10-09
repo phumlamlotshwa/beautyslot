@@ -9,7 +9,6 @@ type Props = {
   size?: number;
 };
 
-// A round photo. With no photo, it shows the first letter of the name instead.
 export function Avatar({ name, url, size = 48 }: Props) {
   const styles = useStyles();
   const circle = { width: size, height: size, borderRadius: size / 2 };

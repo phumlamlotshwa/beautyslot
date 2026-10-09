@@ -12,8 +12,6 @@ export default function Welcome() {
   const { colors, scheme } = useTheme();
   const [checking, setChecking] = useState(true);
 
-  // This screen is always black, so the clock and battery are white here.
-  // When you leave, they go back to matching the rest of the app.
   useFocusEffect(
     useCallback(() => {
       StatusBar.setBarStyle('light-content');

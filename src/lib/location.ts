@@ -16,14 +16,10 @@ export type SavedAddress = {
   lng: number;
 };
 
-// "12 Ferreira Street, Sonheuwel, Mbombela, 1201, South Africa"
-// becomes "12 Ferreira Street, Sonheuwel", short enough for one line.
 export function shortAddress(address: string) {
   return address.split(',').map((part) => part.trim()).filter(Boolean).slice(0, 2).join(', ');
 }
 
-// Works out the suburb and town from a map position, using the phone's own
-// map service, so it's free and doesn't use your Google key.
 async function areaName(lat: number, lng: number) {
   try {
     const [place] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
@@ -57,7 +53,6 @@ export async function getCurrentLocation(): Promise<CustomerLocation | null> {
   }
 }
 
-// All of this customer's saved addresses, the most recently used first
 export async function getSavedAddresses(): Promise<SavedAddress[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -75,14 +70,11 @@ export function savedToLocation(saved: SavedAddress): CustomerLocation {
   return { label: shortAddress(saved.address), lat: saved.lat, lng: saved.lng, source: 'saved' };
 }
 
-// The most recently used saved address, or null if there are none
 export async function getSavedLocation(): Promise<CustomerLocation | null> {
   const [latest] = await getSavedAddresses();
   return latest ? savedToLocation(latest) : null;
 }
 
-// Saves an address, or moves it to the top of the list if it's already saved.
-// Returns an error message if it didn't save, or null if it did.
 export async function saveAddress(place: { address: string; lat: number; lng: number }, label?: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return 'Log in again to save addresses.';
@@ -102,7 +94,6 @@ export async function saveAddress(place: { address: string; lat: number; lng: nu
   return error ? error.message : null;
 }
 
-// Moves a saved address to the top of the list when it's used
 export async function markAddressUsed(id: number) {
   await supabase.from('customer_addresses').update({ last_used_at: new Date().toISOString() }).eq('id', id);
 }

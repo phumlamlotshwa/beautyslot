@@ -18,8 +18,6 @@ type Props = {
 const STEP = 5;
 const MAX_BUFFER = 240;
 
-// The sheet a professional sees when confirming a house call.
-// It works out the travel time and lets them set a travel buffer.
 export function ConfirmHomeVisit({ visible, address, destination, onCancel, onConfirm }: Props) {
   const ui = useUi();
   const styles = useStyles();

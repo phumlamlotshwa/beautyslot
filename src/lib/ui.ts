@@ -2,7 +2,6 @@ import { StyleSheet } from 'react-native';
 import { makeStyles } from './theme-context';
 import { Colors, fonts, lightColors, radius, spacing } from './theme';
 
-// The shared styles, written once as a recipe that takes colours.
 function buildUi(colors: Colors) {
   return {
     screen: { flex: 1, backgroundColor: colors.background },
@@ -50,9 +49,6 @@ function buildUi(colors: Colors) {
   } as const;
 }
 
-// For screens we've redone: switches between light and dark.
-//   const ui = useUi();
 export const useUi = makeStyles(buildUi);
 
-// For screens we haven't redone yet: always light.
 export const ui = StyleSheet.create(buildUi(lightColors));
