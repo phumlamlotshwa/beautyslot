@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../lib/theme';
-import { ui } from '../../lib/ui';
+import { fonts, radius, spacing } from '../../lib/theme';
+import { makeStyles, useTheme } from '../../lib/theme-context';
+import { useUi } from '../../lib/ui';
 
 type Message = {
   id: number;
@@ -21,6 +22,9 @@ function formatMessageTime(iso: string) {
 }
 
 export default function Chat() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const [myId, setMyId] = useState<string | null>(null);
   const [otherName, setOtherName] = useState('Chat');
@@ -45,7 +49,7 @@ export default function Chat() {
         .single();
 
       if (conversationError || !conversation) {
-        setError(conversationError?.message ?? 'Chat not found.');
+        setError(conversationError?.message ?? "This chat isn't available any more.");
         setLoading(false);
         return;
       }
@@ -121,7 +125,7 @@ export default function Chat() {
     setSending(false);
 
     if (sendError || !data) {
-      setError(sendError?.message ?? 'Message not sent. Please try again.');
+      setError(sendError?.message ?? "Your message didn't send. Check your connection and try again.");
       return;
     }
 
@@ -152,7 +156,7 @@ export default function Chat() {
           ListEmptyComponent={
             <View style={styles.emptyBox}>
               <Ionicons name="chatbubble-ellipses-outline" size={36} color={colors.textFaint} />
-              <Text style={styles.emptyText}>No messages yet. Say hello!</Text>
+              <Text style={styles.emptyText}>No messages yet. Ask a question or just say hi.</Text>
             </View>
           }
           renderItem={({ item }) => {
@@ -192,19 +196,46 @@ export default function Chat() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   list: { padding: spacing.lg, flexGrow: 1 },
   emptyBox: { alignItems: 'center', marginTop: spacing.xl, transform: [{ scaleY: -1 }] },
-  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginTop: spacing.sm },
+  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   bubble: { maxWidth: '80%', borderRadius: radius.lg, paddingVertical: spacing.sm, paddingHorizontal: 14, marginVertical: 3 },
   mine: { alignSelf: 'flex-end', backgroundColor: colors.accentDark, borderBottomRightRadius: 4 },
-  theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
+  theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderBottomLeftRadius: 4 },
   body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 22, color: colors.text },
   mineText: { color: colors.onAccent },
   time: { fontFamily: fonts.regular, fontSize: 11, color: colors.textFaint, marginTop: 2, alignSelf: 'flex-end' },
-  mineTime: { color: 'rgba(255, 255, 255, 0.7)' },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
-  input: { flex: 1, maxHeight: 120, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 22, paddingHorizontal: spacing.lg, paddingVertical: 10, fontFamily: fonts.regular, fontSize: 16, color: colors.text },
-  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center' },
+  mineTime: { color: colors.onAccent, opacity: 0.6 },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 120,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    color: colors.text,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.accentDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sendDisabled: { opacity: 0.4 },
-});
+}));
