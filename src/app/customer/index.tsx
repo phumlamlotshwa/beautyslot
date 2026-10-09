@@ -64,12 +64,11 @@ export default function CustomerHome() {
     });
   }, []);
 
-  // The banner at the top is black, so the clock and battery are white here
   useFocusEffect(
     useCallback(() => {
       StatusBar.setBarStyle('light-content');
       return () => StatusBar.setBarStyle(scheme === 'dark' ? 'light-content' : 'dark-content');
-    }, [scheme])
+    }, [scheme]),
   );
 
   useFocusEffect(
@@ -79,7 +78,9 @@ export default function CustomerHome() {
 
         const { data, error: loadError } = await supabase
           .from('professionals')
-          .select('id, first_name, last_name, profession, location, approx_lat, approx_lng, avatar_path, services!inner(id)')
+          .select(
+            'id, first_name, last_name, profession, location, approx_lat, approx_lng, avatar_path, services!inner(id)',
+          )
           .order('first_name', { ascending: true });
 
         if (loadError) {
@@ -88,31 +89,48 @@ export default function CustomerHome() {
           setProfessionals((data ?? []) as unknown as Professional[]);
         }
 
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (user) {
-          const { data: me } = await supabase.from('customers').select('first_name, avatar_path').eq('id', user.id).single();
+          const { data: me } = await supabase
+            .from('customers')
+            .select('first_name, avatar_path')
+            .eq('id', user.id)
+            .single();
           if (me) {
             setMyName(me.first_name);
             const urls = await customerPhotoUrls([me.avatar_path]);
-            setMyAvatarUrl(me.avatar_path ? urls[me.avatar_path] ?? null : null);
+            setMyAvatarUrl(me.avatar_path ? (urls[me.avatar_path] ?? null) : null);
           }
 
-          // New times suggested by a professional, still waiting for Accept or Decline
-          const { count } = await supabase
-            .from('bookings')
-            .select('id', { count: 'exact', head: true })
-            .eq('customer_id', user.id)
-            .eq('status', 'reschedule_proposed')
-            .gte('starts_at', new Date().toISOString());
+          const now = new Date().toISOString();
 
-          setWaitingCount(count ?? 0);
+          const [{ count: suggested }, { count: declined }] = await Promise.all([
+            supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .eq('customer_id', user.id)
+              .eq('status', 'reschedule_proposed')
+              .gte('starts_at', now),
+            supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .eq('customer_id', user.id)
+              .in('status', ['pending', 'confirmed'])
+              .not('declined_starts_at', 'is', null)
+              .is('requested_starts_at', null)
+              .gte('starts_at', now),
+          ]);
+
+          setWaitingCount((suggested ?? 0) + (declined ?? 0));
         }
 
         setLoading(false);
       }
 
       loadProfessionals();
-    }, [])
+    }, []),
   );
 
   const withDistance = professionals.map((p) => ({
