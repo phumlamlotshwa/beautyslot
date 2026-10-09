@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, radius, spacing } from '../lib/theme';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { fonts, radius, spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -17,6 +18,8 @@ type Props = {
 };
 
 export function MonthCalendar({ month, minMonth, selectedDate, isAvailable, onSelectDate, onChangeMonth }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const year = month.getFullYear();
@@ -47,7 +50,7 @@ export function MonthCalendar({ month, minMonth, selectedDate, isAvailable, onSe
           onPress={() => onChangeMonth(new Date(year, monthIndex - 1, 1))}
           disabled={!canGoBack}
         >
-          <Ionicons name="chevron-back" size={22} color={canGoBack ? colors.accentDark : colors.border} />
+          <Ionicons name="chevron-back" size={22} color={canGoBack ? colors.text : colors.border} />
         </Pressable>
 
         <Pressable style={styles.monthButton} onPress={() => setPickerOpen(true)}>
@@ -58,7 +61,7 @@ export function MonthCalendar({ month, minMonth, selectedDate, isAvailable, onSe
         </Pressable>
 
         <Pressable style={styles.arrowButton} onPress={() => onChangeMonth(new Date(year, monthIndex + 1, 1))}>
-          <Ionicons name="chevron-forward" size={22} color={colors.accentDark} />
+          <Ionicons name="chevron-forward" size={22} color={colors.text} />
         </Pressable>
       </View>
 
@@ -109,7 +112,8 @@ export function MonthCalendar({ month, minMonth, selectedDate, isAvailable, onSe
       <Modal visible={pickerOpen} transparent animationType="slide" onRequestClose={() => setPickerOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setPickerOpen(false)} />
         <View style={styles.sheet}>
-          <Text style={styles.sheetTitle}>Choose a month</Text>
+          <View style={styles.handle} />
+          <Text style={styles.sheetTitle}>Jump to a month</Text>
           <ScrollView style={styles.sheetList}>
             {dropdownMonths.map((m) => {
               const isCurrent = m.getFullYear() === year && m.getMonth() === monthIndex;
@@ -135,8 +139,8 @@ export function MonthCalendar({ month, minMonth, selectedDate, isAvailable, onSe
   );
 }
 
-const styles = StyleSheet.create({
-  container: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
+const useStyles = makeStyles((colors) => ({
+  container: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   arrowButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   monthButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
@@ -148,15 +152,22 @@ const styles = StyleSheet.create({
   dayAvailable: { backgroundColor: colors.accentSoft },
   dayToday: { borderWidth: 1.5, borderColor: colors.accentDark },
   daySelected: { backgroundColor: colors.accentDark },
-  dayText: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
+  dayText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
   dayUnavailable: { fontFamily: fonts.regular, color: colors.textFaint, opacity: 0.6 },
   dayTextSelected: { fontFamily: fonts.bold, color: colors.onAccent },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)' },
-  sheet: { backgroundColor: colors.background, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  sheet: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.lg },
   sheetTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
   sheetList: { maxHeight: 360 },
   option: { paddingVertical: 14, alignItems: 'center' },
   optionSelected: { backgroundColor: colors.accentSoft },
   optionText: { fontFamily: fonts.regular, fontSize: 17, color: colors.text },
-  optionTextSelected: { fontFamily: fonts.bold, color: colors.accentDark },
-});
+  optionTextSelected: { fontFamily: fonts.bold, color: colors.text },
+}));
