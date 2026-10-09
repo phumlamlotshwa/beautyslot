@@ -43,7 +43,8 @@ export default function RootLayout() {
         <Stack.Screen name="professional/add-service" options={{ title: 'Add service' }} />
         <Stack.Screen name="professional/service/[id]" options={{ title: 'Edit service' }} />
         <Stack.Screen name="customer/professional/[id]" options={{ title: 'Profile' }} />
-        <Stack.Screen name="professional/hours" options={{ title: 'Working hours' }} />
+        <Stack.Screen name="professional/hours/index" options={{ title: 'Working hours' }} />
+        <Stack.Screen name="professional/hours/[staffId]" options={{ title: 'Working hours' }} />
         <Stack.Screen name="customer/book/[serviceId]" options={{ title: 'Book' }} />
         <Stack.Screen name="customer/bookings" options={{ title: 'My bookings' }} />
         <Stack.Screen name="professional/bookings" options={{ title: 'Bookings' }} />
