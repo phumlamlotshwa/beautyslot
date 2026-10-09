@@ -1,31 +1,76 @@
-export const colors = {
-  background: '#F7F5F0',
-  surface: '#FFFFFF',
-  text: '#2B2B2B',
-  textMuted: '#6B6B6B',
-  textFaint: '#9A9A9A',
-  border: '#E6E2DA',
-  switchOff: '#B5AEA2',
+// BeautySlot colours. Light and dark use the same names, so a screen
+// can switch between them without changing anything else.
 
-  accent: '#7A8F7A',
-  accentDark: '#55695A',
-  accentSoft: '#E3E9E1',
+export const lightColors = {
+  background: '#EFEFEF',
+  surface: '#FFFFFF',
+  text: '#000000',
+  textMuted: '#5E5E5E',
+  textFaint: '#999999',
+  border: '#DADADA',
+  switchOff: '#B8B8B8',
+
+  accent: '#3A3A3A',
+  accentDark: '#000000',
+  accentSoft: '#E2E2E2',
   onAccent: '#FFFFFF',
 
-  danger: '#B5473A',
-  dangerSoft: '#F6E3E0',
-  warning: '#A86A1F',
-  warningSoft: '#F7EBD8',
-  info: '#6A5BA8',
-  infoSoft: '#ECE8F6',
-  completed: '#3F6593',
-  completedSoft: '#E4ECF5',
+  header: '#000000',
+  onHeader: '#FFFFFF',
+  onHeaderMuted: '#A3A3A3',
+  badge: '#D23B2B',
+
+  danger: '#C2392B',
+  dangerSoft: '#F7E2DF',
+  warning: '#8A5A00',
+  warningSoft: '#F3E9D6',
+  info: '#4A4FA3',
+  infoSoft: '#E6E7F4',
+  completed: '#2E5D8A',
+  completedSoft: '#E0E9F2',
 };
 
+export type Colors = typeof lightColors;
+
+export const darkColors: Colors = {
+  background: '#000000',
+  surface: '#1A1A1A',
+  text: '#FFFFFF',
+  textMuted: '#A3A3A3',
+  textFaint: '#6E6E6E',
+  border: '#2E2E2E',
+  switchOff: '#4D4D4D',
+
+  accent: '#D6D6D6',
+  accentDark: '#FFFFFF',
+  accentSoft: '#2A2A2A',
+  onAccent: '#000000',
+
+  header: '#000000',
+  onHeader: '#FFFFFF',
+  onHeaderMuted: '#9A9A9A',
+  badge: '#E5483A',
+
+  danger: '#FF7A6B',
+  dangerSoft: '#3A1E1B',
+  warning: '#F0B451',
+  warningSoft: '#3A2D16',
+  info: '#B0B3FF',
+  infoSoft: '#24264A',
+  completed: '#93BDEB',
+  completedSoft: '#1B2A3B',
+};
+
+// Screens that haven't been switched to useStyles() yet read this one.
+// It stays light until each screen is converted.
+export const colors = lightColors;
+
 export const fonts = {
-  regular: 'DMSans_400Regular',
-  medium: 'DMSans_500Medium',
-  bold: 'DMSans_700Bold',
+  regular: 'Archivo_400Regular',
+  medium: 'Archivo_500Medium',
+  semiBold: 'Archivo_600SemiBold',
+  bold: 'Archivo_700Bold',
+  extraBold: 'Archivo_800ExtraBold',
 };
 
 export const radius = {

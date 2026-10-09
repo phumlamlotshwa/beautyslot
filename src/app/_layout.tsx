@@ -1,26 +1,59 @@
+import {
+  Archivo_400Regular,
+  Archivo_500Medium,
+  Archivo_600SemiBold,
+  Archivo_700Bold,
+  Archivo_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/archivo';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
-import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold, useFonts } from '@expo-google-fonts/dm-sans';
-import { colors, fonts } from '../lib/theme';
+import { StatusBar } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { fonts } from '../lib/theme';
+import { AppThemeProvider, useTheme } from '../lib/theme-context';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-    const [fontsLoaded] = useFonts({
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_700Bold,
+  const [fontsLoaded] = useFonts({
+    Archivo_400Regular,
+    Archivo_500Medium,
+    Archivo_600SemiBold,
+    Archivo_700Bold,
+    Archivo_800ExtraBold,
   });
 
   if (!fontsLoaded) return null;
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
 
+  return (
+    <AppThemeProvider>
+      <AppStack />
+    </AppThemeProvider>
+  );
+}
+
+function AppStack() {
+  const { scheme, colors } = useTheme();
+  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+
+  const navigationTheme = {
+    ...base,
+    colors: {
+      ...base.colors,
+      primary: colors.accentDark,
+      background: colors.background,
+      card: colors.background,
+      text: colors.text,
+      border: colors.border,
+    },
+  };
+
+  return (
+    <ThemeProvider value={navigationTheme}>
+      <StatusBar barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'} />
       <AnimatedSplashOverlay />
-            <Stack
+      <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.accentDark,
@@ -32,7 +65,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="sign-up" options={{ title: 'Sign up' }} />
         <Stack.Screen name="login" options={{ title: 'Log in' }} />
-                <Stack.Screen
+        <Stack.Screen
           name="customer/index"
           options={{ title: 'BeautySlot', headerBackVisible: false, gestureEnabled: false }}
         />
