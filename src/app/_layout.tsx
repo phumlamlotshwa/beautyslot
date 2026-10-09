@@ -69,9 +69,9 @@ function AppStack() {
           name="customer/index"
           options={{ headerShown: false, gestureEnabled: false }}
         />
-        <Stack.Screen
+               <Stack.Screen
           name="professional/index"
-          options={{ title: 'BeautySlot', headerBackVisible: false, gestureEnabled: false }}
+          options={{ headerShown: false, gestureEnabled: false }}
         />
         <Stack.Screen name="professional/add-service" options={{ title: 'Add service' }} />
         <Stack.Screen name="professional/service/[id]" options={{ title: 'Edit service' }} />
