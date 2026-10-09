@@ -1,18 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Avatar } from '../../components/avatar';
 import { ConfirmHomeVisit } from '../../components/confirm-home-visit';
 import { formatPrice } from '../../lib/format';
+import { customerPhotoUrls } from '../../lib/photos';
 import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
 import { colors, fonts, radius, spacing } from '../../lib/theme';
 import { ui } from '../../lib/ui';
-import { Avatar } from '../../components/avatar';
-import { customerPhotoUrls } from '../../lib/photos';
 
 type Booking = {
   id: number;
+  staff_id: number;
+  staff: { name: string } | null;
   starts_at: string;
   status: BookingStatus;
   location_type: 'at_professional' | 'at_customer';
@@ -36,12 +38,13 @@ function formatBookingTime(iso: string) {
 
 export default function ProfessionalBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [customerAvatars, setCustomerAvatars] = useState<Record<string, string>>({});
+  const [staffFilter, setStaffFilter] = useState<number | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
   const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
   const [error, setError] = useState<string | null>(null);
-  const [customerAvatars, setCustomerAvatars] = useState<Record<string, string>>({});
 
   function toggleSection(title: string) {
     setClosed((current) => {
@@ -68,7 +71,7 @@ export default function ProfessionalBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, services(name, price), customers(first_name, last_name, avatar_path)'
+        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, services(name, price), customers(first_name, last_name, avatar_path)'
       )
       .eq('professional_id', user.id)
       .order('starts_at', { ascending: true });
@@ -76,7 +79,7 @@ export default function ProfessionalBookings() {
     if (loadError) {
       setError(loadError.message);
     } else {
-            const list = (data ?? []) as unknown as Booking[];
+      const list = (data ?? []) as unknown as Booking[];
       setBookings(list);
       setCustomerAvatars(await customerPhotoUrls(list.map((b) => b.customers?.avatar_path)));
     }
@@ -150,11 +153,15 @@ export default function ProfessionalBookings() {
   const now = Date.now();
   const isFuture = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
-  const newRequests = bookings.filter((b) => b.status === 'pending' && isFuture(b));
-  const confirmed = bookings.filter((b) => b.status === 'confirmed' && isFuture(b));
-  const waiting = bookings.filter((b) => b.status === 'reschedule_proposed' && isFuture(b));
-  const cancelled = bookings.filter((b) => b.status === 'cancelled').reverse();
-  const history = bookings
+  const team = [...new Map(bookings.filter((b) => b.staff).map((b) => [b.staff_id, b.staff!.name])).entries()]
+    .map(([id, name]) => ({ id, name }));
+  const visible = staffFilter === 'all' ? bookings : bookings.filter((b) => b.staff_id === staffFilter);
+
+  const newRequests = visible.filter((b) => b.status === 'pending' && isFuture(b));
+  const confirmed = visible.filter((b) => b.status === 'confirmed' && isFuture(b));
+  const waiting = visible.filter((b) => b.status === 'reschedule_proposed' && isFuture(b));
+  const cancelled = visible.filter((b) => b.status === 'cancelled').reverse();
+  const history = visible
     .filter(
       (b) =>
         b.status !== 'cancelled' &&
@@ -194,7 +201,30 @@ export default function ProfessionalBookings() {
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={ui.content}
         stickySectionHeadersEnabled={false}
-        ListHeaderComponent={error ? <Text style={ui.error}>{error}</Text> : null}
+        ListHeaderComponent={
+          <>
+            {team.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+                <Pressable
+                  style={[ui.chip, staffFilter === 'all' && ui.chipSelected]}
+                  onPress={() => setStaffFilter('all')}
+                >
+                  <Text style={[ui.chipText, staffFilter === 'all' && ui.chipTextSelected]}>Everyone</Text>
+                </Pressable>
+                {team.map((m) => (
+                  <Pressable
+                    key={m.id}
+                    style={[ui.chip, staffFilter === m.id && ui.chipSelected]}
+                    onPress={() => setStaffFilter(m.id)}
+                  >
+                    <Text style={[ui.chipText, staffFilter === m.id && ui.chipTextSelected]}>{m.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+            {error && <Text style={ui.error}>{error}</Text>}
+          </>
+        }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <Ionicons name="calendar-outline" size={40} color={colors.textFaint} />
@@ -231,7 +261,7 @@ export default function ProfessionalBookings() {
                 </View>
               </View>
 
-                            <View style={styles.personRow}>
+              <View style={styles.personRow}>
                 <Avatar
                   name={item.customers?.first_name ?? '?'}
                   url={customerAvatars[item.customers?.avatar_path ?? ''] ?? null}
@@ -245,6 +275,12 @@ export default function ProfessionalBookings() {
                 <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
                 <Text style={styles.lineText}>{formatBookingTime(item.starts_at)}</Text>
               </View>
+              {team.length > 1 && (
+                <View style={styles.line}>
+                  <Ionicons name="cut-outline" size={15} color={colors.textMuted} />
+                  <Text style={styles.lineText}>With {item.staff?.name}</Text>
+                </View>
+              )}
 
               {isHome && (
                 <View style={styles.homeBox}>
@@ -325,6 +361,7 @@ export default function ProfessionalBookings() {
 }
 
 const styles = StyleSheet.create({
+  filters: { gap: spacing.sm, paddingBottom: spacing.lg },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
@@ -337,6 +374,7 @@ const styles = StyleSheet.create({
   serviceName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
   badgeText: { fontFamily: fonts.medium, fontSize: 12 },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
   homeBox: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
@@ -358,5 +396,4 @@ const styles = StyleSheet.create({
   moveText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
   cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
   cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
 });
