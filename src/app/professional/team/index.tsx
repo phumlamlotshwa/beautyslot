@@ -14,6 +14,7 @@ type Member = {
   name: string;
   avatar_path: string | null;
   is_active: boolean;
+  category: string | null;
   staff_services: { service_id: number }[];
 };
 
@@ -38,7 +39,7 @@ export default function Team() {
 
         const { data, error: loadError } = await supabase
           .from('staff')
-          .select('id, name, avatar_path, is_active, staff_services(service_id)')
+          .select('id, name, avatar_path, is_active, category, staff_services(service_id)')
           .eq('professional_id', user.id)
           .order('created_at', { ascending: true });
 
@@ -81,6 +82,7 @@ export default function Team() {
         }
         renderItem={({ item }) => {
           const count = item.staff_services.length;
+          const servicesText = count === 0 ? 'No services yet' : `${count} service${count === 1 ? '' : 's'}`;
           return (
             <Link href={{ pathname: '/professional/team/[staffId]', params: { staffId: String(item.id) } }} asChild>
               <Pressable style={StyleSheet.flatten([styles.card, !item.is_active && styles.cardInactive])}>
@@ -89,7 +91,7 @@ export default function Team() {
                   <Text style={styles.name}>{item.name}</Text>
                   {item.is_active ? (
                     <Text style={styles.details}>
-                      {count === 0 ? 'No services yet' : `${count} service${count === 1 ? '' : 's'}`}
+                      {item.category ? `${item.category} · ${servicesText}` : servicesText}
                     </Text>
                   ) : (
                     <Text style={styles.inactive}>Not taking bookings</Text>

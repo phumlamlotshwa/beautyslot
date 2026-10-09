@@ -23,6 +23,8 @@ import { useUi } from '../../../lib/ui';
 
 type Service = { id: number; name: string; duration_minutes: number };
 
+const suggestedCategories = ['Hairstylist', 'Braider', 'Barber', 'Nail tech', 'Makeup artist', 'Lash tech'];
+
 export default function TeamMember() {
   const ui = useUi();
   const styles = useStyles();
@@ -35,6 +37,9 @@ export default function TeamMember() {
   const [avatarPath, setAvatarPath] = useState<string | null>(null);
   const [newPhotoUri, setNewPhotoUri] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
+  const [category, setCategory] = useState<string | null>(null);
+  const [ownCategory, setOwnCategory] = useState('');
+  const [typingOwn, setTypingOwn] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [assigned, setAssigned] = useState<Set<number>>(new Set());
   const [initialAssigned, setInitialAssigned] = useState<Set<number>>(new Set());
@@ -67,7 +72,7 @@ export default function TeamMember() {
       } else {
         const { data: member, error: loadError } = await supabase
           .from('staff')
-          .select('name, avatar_path, is_active, staff_services(service_id)')
+          .select('name, avatar_path, is_active, category, staff_services(service_id)')
           .eq('id', staffId)
           .single();
 
@@ -77,6 +82,12 @@ export default function TeamMember() {
           setName(member.name);
           setAvatarPath(member.avatar_path);
           setIsActive(member.is_active);
+          if (member.category && suggestedCategories.includes(member.category)) {
+            setCategory(member.category);
+          } else if (member.category) {
+            setTypingOwn(true);
+            setOwnCategory(member.category);
+          }
           const ids = new Set((member.staff_services ?? []).map((s: { service_id: number }) => s.service_id));
           setAssigned(ids);
           setInitialAssigned(new Set(ids));
@@ -99,6 +110,16 @@ export default function TeamMember() {
       }
       return next;
     });
+  }
+
+  function pickCategory(value: string) {
+    setTypingOwn(false);
+    setCategory(value);
+  }
+
+  function pickOwnCategory() {
+    setTypingOwn(true);
+    setCategory(null);
   }
 
   async function choosePhoto(source: PhotoSource) {
@@ -134,8 +155,14 @@ export default function TeamMember() {
     if (!userId) return;
     setError(null);
 
+    const finalCategory = typingOwn ? ownCategory.trim() : category;
+
     if (!name.trim()) {
       setError('Add their name.');
+      return;
+    }
+    if (!finalCategory) {
+      setError(typingOwn ? 'Type in what they do.' : 'Pick what they do.');
       return;
     }
     if (isActive && assigned.size === 0) {
@@ -160,7 +187,13 @@ export default function TeamMember() {
       if (isNew) {
         const { data, error: insertError } = await supabase
           .from('staff')
-          .insert({ professional_id: userId, name: name.trim(), avatar_path: photoPath, is_active: isActive })
+          .insert({
+            professional_id: userId,
+            name: name.trim(),
+            category: finalCategory,
+            avatar_path: photoPath,
+            is_active: isActive,
+          })
           .select('id')
           .single();
 
@@ -172,7 +205,7 @@ export default function TeamMember() {
       } else {
         const { error: updateError } = await supabase
           .from('staff')
-          .update({ name: name.trim(), avatar_path: photoPath, is_active: isActive })
+          .update({ name: name.trim(), category: finalCategory, avatar_path: photoPath, is_active: isActive })
           .eq('id', memberId!);
 
         if (updateError) {
@@ -278,6 +311,33 @@ export default function TeamMember() {
           maxLength={60}
         />
 
+        <Text style={ui.label}>What they do</Text>
+        <View style={styles.chips}>
+          {suggestedCategories.map((c) => {
+            const on = !typingOwn && category === c;
+            return (
+              <Pressable key={c} style={[ui.chip, on && ui.chipSelected]} onPress={() => pickCategory(c)}>
+                <Text style={[ui.chipText, on && ui.chipTextSelected]}>{c}</Text>
+              </Pressable>
+            );
+          })}
+          <Pressable style={[ui.chip, typingOwn && ui.chipSelected]} onPress={pickOwnCategory}>
+            <Text style={[ui.chipText, typingOwn && ui.chipTextSelected]}>Other</Text>
+          </Pressable>
+        </View>
+        {typingOwn && (
+          <TextInput
+            style={[ui.input, styles.ownInput]}
+            value={ownCategory}
+            onChangeText={setOwnCategory}
+            placeholder="e.g. Wig installer"
+            placeholderTextColor={colors.textFaint}
+            maxLength={40}
+            autoCapitalize="sentences"
+            autoFocus
+          />
+        )}
+
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.switchLabel}>Taking bookings</Text>
@@ -344,6 +404,8 @@ const useStyles = makeStyles((colors) => ({
     borderWidth: 3,
     borderColor: colors.background,
   },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  ownInput: { marginTop: spacing.sm },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.xl },
   switchLabel: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.text },
   serviceRow: {
