@@ -49,7 +49,10 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
   const styles = useStyles();
   const { colors } = useTheme();
   const [name, setName] = useState(initial?.name ?? '');
-  const [category, setCategory] = useState<string | null>(initial?.category ?? null);
+  const startsOwn = !!initial?.category && !categories.includes(initial.category);
+  const [category, setCategory] = useState<string | null>(startsOwn ? null : (initial?.category ?? null));
+  const [ownCategory, setOwnCategory] = useState(startsOwn ? initial!.category : '');
+  const [typingOwn, setTypingOwn] = useState(startsOwn);
   const [offeredAt, setOfferedAt] = useState<OfferedAt>(initial?.offeredAt ?? 'at_professional');
   const [price, setPrice] = useState(initial ? String(initial.price) : '');
   const [duration, setDuration] = useState<number | null>(initial?.durationMinutes ?? null);
@@ -60,13 +63,14 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
     setError(null);
 
     const priceNumber = Number(price.replace(',', '.'));
+    const finalCategory = typingOwn ? ownCategory.trim() : category;
 
     if (!name.trim()) {
       setError('Give the service a name.');
       return;
     }
-    if (!category) {
-      setError('Pick a category.');
+    if (!finalCategory) {
+      setError(typingOwn ? 'Type in the category.' : 'Pick a category.');
       return;
     }
     if (!price.trim()) {
@@ -87,7 +91,7 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
     try {
       await onSubmit({
         name: name.trim(),
-        category,
+        category: finalCategory,
         offeredAt,
         price: priceNumber,
         durationMinutes: duration,
@@ -113,12 +117,42 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
 
         <Text style={ui.label}>Category</Text>
         <View style={styles.wrap}>
-          {categories.map((c) => (
-            <Pressable key={c} style={[ui.chip, category === c && ui.chipSelected]} onPress={() => setCategory(c)}>
-              <Text style={[ui.chipText, category === c && ui.chipTextSelected]}>{c}</Text>
-            </Pressable>
-          ))}
+          {categories.map((c) => {
+            const on = !typingOwn && category === c;
+            return (
+              <Pressable
+                key={c}
+                style={[ui.chip, on && ui.chipSelected]}
+                onPress={() => {
+                  setTypingOwn(false);
+                  setCategory(c);
+                }}
+              >
+                <Text style={[ui.chipText, on && ui.chipTextSelected]}>{c}</Text>
+              </Pressable>
+            );
+          })}
+          <Pressable
+            style={[ui.chip, typingOwn && ui.chipSelected]}
+            onPress={() => {
+              setTypingOwn(true);
+              setCategory(null);
+            }}
+          >
+            <Text style={[ui.chipText, typingOwn && ui.chipTextSelected]}>Other</Text>
+          </Pressable>
         </View>
+        {typingOwn && (
+          <TextInput
+            style={[ui.input, styles.ownInput]}
+            value={ownCategory}
+            onChangeText={setOwnCategory}
+            placeholder="e.g. Lashes"
+            placeholderTextColor={colors.textFaint}
+            maxLength={40}
+            autoFocus
+          />
+        )}
 
         <Text style={ui.label}>Where do you offer it?</Text>
         <View style={styles.wrap}>
@@ -168,4 +202,5 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
 const useStyles = makeStyles(() => ({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.md },
+  ownInput: { marginTop: spacing.sm },
 }));
