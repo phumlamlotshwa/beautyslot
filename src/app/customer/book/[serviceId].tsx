@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { AddressInput } from '../../../components/address-input';
 import { Avatar } from '../../../components/avatar';
 import { MonthCalendar } from '../../../components/month-calendar';
-import { Toggle } from '../../../components/toggle';
 import { formatDuration, formatPrice, OfferedAt } from '../../../lib/format';
+import { getSavedAddresses, markAddressUsed, SavedAddress, saveAddress, shortAddress } from '../../../lib/location';
 import { Place } from '../../../lib/maps';
 import { professionalPhotoUrl } from '../../../lib/photos';
 import { getOpenSlots } from '../../../lib/slots';
@@ -52,8 +52,10 @@ export default function BookService() {
   const [choice, setChoice] = useState<Choice>('any');
   const [locationType, setLocationType] = useState<LocationType>('at_professional');
   const [address, setAddress] = useState<Place | null>(null);
-  const [savedAddress, setSavedAddress] = useState<Place | null>(null);
-  const [saveAddress, setSaveAddress] = useState(true);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [addressLabel, setAddressLabel] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressMessage, setAddressMessage] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -114,20 +116,11 @@ export default function BookService() {
         .map((s) => ({ id: s.id, name: s.name, avatar_path: s.avatar_path, hours: s.working_hours ?? [] }));
 
       if (typedService.offered_at !== 'at_professional') {
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (user) {
-          const { data: saved } = await supabase
-            .from('customer_private')
-            .select('home_address, home_lat, home_lng')
-            .eq('customer_id', user.id)
-            .maybeSingle();
-
-          if (saved) {
-            const place = { address: saved.home_address, lat: saved.home_lat, lng: saved.home_lng };
-            setSavedAddress(place);
-            setAddress(place);
-          }
+        // Start with the most recently used saved address, if there is one
+        const saved = await getSavedAddresses();
+        setSavedAddresses(saved);
+        if (saved[0]) {
+          setAddress({ address: saved[0].address, lat: saved[0].lat, lng: saved[0].lng });
         }
       }
 
@@ -264,9 +257,34 @@ export default function BookService() {
   const isHome = locationType === 'at_customer';
   const callOutFee = isHome ? Number(quote?.fee ?? 0) : 0;
   const total = Number(service?.price ?? 0) + callOutFee;
-  const addressIsNew = !!address && address.address !== savedAddress?.address;
+  const matchingSaved = savedAddresses.find((a) => a.address === address?.address) ?? null;
+  const addressIsNew = !!address && !matchingSaved;
   const canConfirm = !isHome || (!!address && !!quote && quote.in_range && !quoting);
   const chosenMember = choice === 'any' ? null : team.find((m) => m.id === choice) ?? null;
+
+  function pickSaved(saved: SavedAddress) {
+    setAddressMessage(null);
+    setAddress({ address: saved.address, lat: saved.lat, lng: saved.lng });
+  }
+
+  // Saves the address typed in the box, with its name if given
+  async function handleSaveAddress() {
+    if (!address) return;
+
+    setAddressMessage(null);
+    setSavingAddress(true);
+    const problem = await saveAddress(address, addressLabel.trim() || undefined);
+    setSavingAddress(false);
+
+    if (problem) {
+      setAddressMessage(`The address wasn't saved: ${problem}`);
+      return;
+    }
+
+    setSavedAddresses(await getSavedAddresses());
+    setAddressLabel('');
+    setAddressMessage('Saved. It will be ready next time you book.');
+  }
 
   async function handleConfirm() {
     if (!service || !selectedSlot) return;
@@ -331,14 +349,9 @@ export default function BookService() {
       return;
     }
 
-    if (isHome && address && addressIsNew && saveAddress) {
-      await supabase.from('customer_private').upsert({
-        customer_id: user.id,
-        home_address: address.address,
-        home_lat: address.lat,
-        home_lng: address.lng,
-        updated_at: new Date().toISOString(),
-      });
+    // Moves the saved address used for this booking to the top of the list
+    if (isHome && matchingSaved) {
+      markAddressUsed(matchingSaved.id);
     }
 
     setConfirming(false);
@@ -437,12 +450,71 @@ export default function BookService() {
             {isHome && (
               <>
                 <Text style={ui.sectionTitle}>Your address</Text>
-                <AddressInput value={address} onChange={setAddress} />
+
+                {savedAddresses.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedChips}>
+                    {savedAddresses.map((a) => {
+                      const selected = matchingSaved?.id === a.id;
+                      return (
+                        <Pressable
+                          key={a.id}
+                          style={[ui.chip, styles.savedChip, selected && ui.chipSelected]}
+                          onPress={() => pickSaved(a)}
+                        >
+                          <Text style={[ui.chipText, selected && ui.chipTextSelected]} numberOfLines={1}>
+                            {a.label || shortAddress(a.address)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                <AddressInput
+                  value={address}
+                  onChange={(place) => {
+                    setAddressMessage(null);
+                    setAddress(place);
+                  }}
+                />
+
                 {addressIsNew && (
-                  <View style={styles.saveRow}>
-                    <Text style={styles.saveText}>Save as my home address</Text>
-                    <Toggle value={saveAddress} onValueChange={setSaveAddress} />
+                  <View style={styles.saveCard}>
+                    <Text style={styles.saveTitle}>Save this address for next time?</Text>
+                    <View style={styles.nameChips}>
+                      {['Home', 'Work'].map((name) => (
+                        <Pressable
+                          key={name}
+                          style={[ui.chip, addressLabel === name && ui.chipSelected]}
+                          onPress={() => setAddressLabel(addressLabel === name ? '' : name)}
+                        >
+                          <Text style={[ui.chipText, addressLabel === name && ui.chipTextSelected]}>{name}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <TextInput
+                      style={[ui.input, styles.nameInput]}
+                      value={addressLabel}
+                      onChangeText={setAddressLabel}
+                      placeholder="Or type your own name for it (optional)"
+                      placeholderTextColor={colors.textFaint}
+                      maxLength={30}
+                    />
+                    <Pressable
+                      style={[styles.saveButton, savingAddress && ui.buttonDisabled]}
+                      onPress={handleSaveAddress}
+                      disabled={savingAddress}
+                    >
+                      {savingAddress ? (
+                        <ActivityIndicator color={colors.text} />
+                      ) : (
+                        <Text style={styles.saveButtonText}>Save address</Text>
+                      )}
+                    </Pressable>
                   </View>
+                )}
+                {addressMessage && (
+                  <Text style={addressMessage.startsWith('Saved') ? styles.addressMessage : ui.error}>{addressMessage}</Text>
                 )}
 
                 {quoting && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
@@ -598,8 +670,22 @@ const useStyles = makeStyles((colors) => ({
   placeCardSelected: { backgroundColor: colors.accentDark },
   placeText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
   placeTextSelected: { color: colors.onAccent },
-  saveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
-  saveText: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
+  savedChips: { gap: spacing.sm, paddingBottom: spacing.md },
+  savedChip: { maxWidth: 220 },
+  saveCard: { backgroundColor: colors.surface, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  saveTitle: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text, marginBottom: spacing.sm },
+  nameChips: { flexDirection: 'row', gap: spacing.sm },
+  nameInput: { marginTop: spacing.sm },
+  saveButton: {
+    borderWidth: 1.5,
+    borderColor: colors.accentDark,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  saveButtonText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
+  addressMessage: { fontFamily: fonts.medium, fontSize: 14, color: colors.text, marginTop: spacing.sm },
   quoteBox: {
     flexDirection: 'row',
     alignItems: 'center',
