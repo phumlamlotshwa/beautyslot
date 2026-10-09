@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts } from '../lib/theme';
+import { Text, View } from 'react-native';
+import { fonts } from '../lib/theme';
+import { makeStyles } from '../lib/theme-context';
 
 type Props = {
   name: string;
@@ -8,7 +9,9 @@ type Props = {
   size?: number;
 };
 
+// A round photo. With no photo, it shows the first letter of the name instead.
 export function Avatar({ name, url, size = 48 }: Props) {
+  const styles = useStyles();
   const circle = { width: size, height: size, borderRadius: size / 2 };
 
   if (url) {
@@ -22,8 +25,8 @@ export function Avatar({ name, url, size = 48 }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   image: { backgroundColor: colors.accentSoft },
   fallback: { backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
-  letter: { fontFamily: fonts.bold, color: colors.accentDark },
-});
+  letter: { fontFamily: fonts.bold, color: colors.text },
+}));
