@@ -241,7 +241,7 @@ export default function MyBookings() {
           </Pressable>
         )}
         renderItem={({ item }) => {
-          const status = statusStyle(item.status, 'customer');
+          const status = statusStyle(item.status, 'customer', colors);
           const future = isFuture(item);
           const isProposal = item.status === 'reschedule_proposed' && future;
           const canCancel = future && (item.status === 'pending' || item.status === 'confirmed');
