@@ -1,8 +1,18 @@
 import { ReactNode, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { formatDuration, OfferedAt, offeredAtOptions } from '../lib/format';
-import { colors, spacing } from '../lib/theme';
-import { ui } from '../lib/ui';
+import { spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
+import { useUi } from '../lib/ui';
 import { SelectField, SelectOption } from './select-field';
 
 const categories = ['Hair', 'Braids', 'Barbering', 'Nails', 'Makeup'];
@@ -35,6 +45,9 @@ type Props = {
 };
 
 export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [name, setName] = useState(initial?.name ?? '');
   const [category, setCategory] = useState<string | null>(initial?.category ?? null);
   const [offeredAt, setOfferedAt] = useState<OfferedAt>(initial?.offeredAt ?? 'at_professional');
@@ -48,12 +61,24 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
 
     const priceNumber = Number(price.replace(',', '.'));
 
-    if (!name.trim() || !category || !price || !duration) {
-      setError('Please fill in all the fields.');
+    if (!name.trim()) {
+      setError('Give the service a name.');
+      return;
+    }
+    if (!category) {
+      setError('Pick a category.');
+      return;
+    }
+    if (!price.trim()) {
+      setError('Add a price.');
       return;
     }
     if (isNaN(priceNumber) || priceNumber < 0) {
-      setError('Please enter a valid price.');
+      setError("That price doesn't look right. Use numbers only, like 250.");
+      return;
+    }
+    if (!duration) {
+      setError('Pick how long it takes.');
       return;
     }
 
@@ -68,18 +93,14 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
         durationMinutes: duration,
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
+      setError(e instanceof Error ? e.message : "Couldn't save. Check your connection and try again.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={ui.screen}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <KeyboardAvoidingView style={ui.screen} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <Text style={ui.label}>Service name</Text>
         <TextInput
@@ -112,7 +133,7 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
           ))}
         </View>
         {offeredAt !== 'at_professional' && (
-          <Text style={ui.help}>Make sure your address and call-out fees are set under House calls.</Text>
+          <Text style={ui.help}>Set your address and call-out fee under House calls if you haven't yet.</Text>
         )}
 
         <View style={styles.row}>
@@ -144,7 +165,7 @@ export function ServiceForm({ initial, submitLabel, onSubmit, children }: Props)
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.md },
-});
+}));

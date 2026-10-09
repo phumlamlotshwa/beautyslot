@@ -4,8 +4,10 @@ import { supabase } from '../../lib/supabase';
 
 export default function AddService() {
   async function handleAdd(values: ServiceValues) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('You need to be logged in to add a service.');
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('Log in again to add a service.');
 
     const { error } = await supabase.from('services').insert({
       professional_id: user.id,
@@ -16,10 +18,10 @@ export default function AddService() {
       duration_minutes: values.durationMinutes,
     });
 
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("Couldn't add the service. Check your connection and try again.");
 
     router.back();
   }
 
-  return <ServiceForm submitLabel="Save service" onSubmit={handleAdd} />;
+  return <ServiceForm submitLabel="Add service" onSubmit={handleAdd} />;
 }
