@@ -1,9 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, fonts, radius, spacing } from '../lib/theme';
-import { ui } from '../lib/ui';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fonts, radius, spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
+import { useUi } from '../lib/ui';
 
 type Catalogue = { id: number; name: string };
 
@@ -19,6 +31,10 @@ type Props = {
 };
 
 export function PhotoEditor({ visible, imageUrl, caption, catalogueId, catalogues, onClose, onSave, onDelete }: Props) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [text, setText] = useState(caption ?? '');
   const [selected, setSelected] = useState<number | null>(catalogueId);
   const [saving, setSaving] = useState(false);
@@ -39,7 +55,7 @@ export function PhotoEditor({ visible, imageUrl, caption, catalogueId, catalogue
     try {
       await onSave(text.trim() || null, selected);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save your changes.');
+      setError(e instanceof Error ? e.message : "Couldn't save. Try again.");
     } finally {
       setSaving(false);
     }
@@ -50,7 +66,7 @@ export function PhotoEditor({ visible, imageUrl, caption, catalogueId, catalogue
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView style={ui.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}>
           <Pressable onPress={onClose} hitSlop={10}>
             <Ionicons name="close" size={26} color={colors.text} />
           </Pressable>
@@ -63,7 +79,7 @@ export function PhotoEditor({ visible, imageUrl, caption, catalogueId, catalogue
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {imageUrl && <Image source={{ uri: imageUrl }} style={styles.image} contentFit="contain" />}
 
-          <Text style={ui.label}>Description (optional)</Text>
+          <Text style={ui.label}>Description</Text>
           <TextInput
             style={[ui.input, styles.captionInput]}
             value={text}
@@ -73,7 +89,6 @@ export function PhotoEditor({ visible, imageUrl, caption, catalogueId, catalogue
             multiline
             maxLength={200}
           />
-          <Text style={styles.counter}>{text.length}/200</Text>
 
           <Text style={ui.label}>Catalogue</Text>
           <View style={styles.wrap}>
@@ -99,12 +114,17 @@ export function PhotoEditor({ visible, imageUrl, caption, catalogueId, catalogue
   );
 }
 
-const styles = StyleSheet.create({
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: 60, paddingBottom: spacing.md },
+const useStyles = makeStyles((colors) => ({
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+  },
   topTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
   content: { padding: spacing.xl, paddingTop: 0, paddingBottom: 48 },
   image: { width: '100%', aspectRatio: 1, borderRadius: radius.md, backgroundColor: colors.accentSoft },
   captionInput: { minHeight: 80, textAlignVertical: 'top' },
-  counter: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint, textAlign: 'right', marginTop: 4 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-});
+}));
