@@ -50,7 +50,6 @@ export default function ProfessionalBookings() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
-  // Every section starts closed. Tap a heading to open it.
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -69,7 +68,9 @@ export default function ProfessionalBookings() {
   const loadBookings = useCallback(async () => {
     setError(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       setLoading(false);
@@ -79,7 +80,7 @@ export default function ProfessionalBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, requested_starts_at, change_reason, services(name, price), customers(first_name, last_name, avatar_path)'
+        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, requested_starts_at, change_reason, services(name, price), customers(first_name, last_name, avatar_path)',
       )
       .eq('professional_id', user.id)
       .order('starts_at', { ascending: true });
@@ -98,17 +99,14 @@ export default function ProfessionalBookings() {
   useFocusEffect(
     useCallback(() => {
       loadBookings();
-    }, [loadBookings])
+    }, [loadBookings]),
   );
 
   async function updateStatus(booking: Booking, status: BookingStatus) {
     setError(null);
     setUpdatingId(booking.id);
 
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({ status })
-      .eq('id', booking.id);
+    const { error: updateError } = await supabase.from('bookings').update({ status }).eq('id', booking.id);
 
     setUpdatingId(null);
 
@@ -130,7 +128,9 @@ export default function ProfessionalBookings() {
 
     if (updateError) {
       if (updateError.code === '23P01') {
-        throw new Error('With that travel buffer, this visit overlaps another booking. Try a shorter buffer, or suggest a new time.');
+        throw new Error(
+          'With that travel buffer, this visit overlaps another booking. Try a shorter buffer, or suggest a new time.',
+        );
       }
       throw new Error(updateError.message);
     }
@@ -160,9 +160,7 @@ export default function ProfessionalBookings() {
 
     if (answerError) {
       if (answerError.code === '23P01') {
-        setError(
-          `Someone else has booked ${booking.customers?.first_name ?? 'the customer'}'s new time, so the booking stays as it was. Decline it, or suggest another time.`
-        );
+        setError('That time has been taken by another booking. Decline, or suggest a different time.');
       } else if (answerError.code === 'P0001') {
         setError(answerError.message);
       } else {
@@ -177,12 +175,12 @@ export default function ProfessionalBookings() {
 
   function declineChange(booking: Booking) {
     Alert.alert(
-      'Keep the original time?',
-      `${booking.customers?.first_name ?? 'The customer'}'s booking stays on ${formatBookingTime(booking.starts_at)}.`,
+      booking.customers?.first_name ? `Decline ${booking.customers.first_name}'s request?` : 'Decline this request?',
+      `The booking stays on ${formatBookingTime(booking.starts_at)}.`,
       [
         { text: 'Go back', style: 'cancel' },
-        { text: 'Keep original', style: 'destructive', onPress: () => answerChange(booking, false) },
-      ]
+        { text: 'Decline', style: 'destructive', onPress: () => answerChange(booking, false) },
+      ],
     );
   }
 
@@ -193,43 +191,34 @@ export default function ProfessionalBookings() {
       [
         { text: 'Go back', style: 'cancel' },
         { text: title, style: 'destructive', onPress: () => updateStatus(booking, 'cancelled') },
-      ]
+      ],
     );
   }
 
   const now = Date.now();
   const isFuture = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
-  // A customer has asked to move this booking and is waiting for an answer
   const hasChangeRequest = (b: Booking) =>
     isFuture(b) && (b.status === 'pending' || b.status === 'confirmed') && !!b.requested_starts_at;
 
-  // Needs an answer: a new booking, or a customer asking to change the time
   const needsAnswer = (b: Booking) => (b.status === 'pending' && isFuture(b)) || hasChangeRequest(b);
 
-  const team = [...new Map(bookings.filter((b) => b.staff).map((b) => [b.staff_id, b.staff!.name])).entries()]
-    .map(([id, name]) => ({ id, name }));
+  const team = [...new Map(bookings.filter((b) => b.staff).map((b) => [b.staff_id, b.staff!.name])).entries()].map(
+    ([id, name]) => ({ id, name }),
+  );
 
-  // Bookings waiting for an answer, for everyone or for one stylist
   const newCount = (staffId: number | 'all') =>
     bookings.filter((b) => needsAnswer(b) && (staffId === 'all' || b.staff_id === staffId)).length;
 
   const visible = staffFilter === 'all' ? bookings : bookings.filter((b) => b.staff_id === staffFilter);
 
   const newRequests = visible.filter((b) => b.status === 'pending' && isFuture(b) && !hasChangeRequest(b));
-  // Customers asking to move a booking, and new times you've suggested
-  const reschedules = visible.filter(
-    (b) => hasChangeRequest(b) || (b.status === 'reschedule_proposed' && isFuture(b))
-  );
+  const reschedules = visible.filter((b) => hasChangeRequest(b) || (b.status === 'reschedule_proposed' && isFuture(b)));
   const confirmed = visible.filter((b) => b.status === 'confirmed' && isFuture(b) && !hasChangeRequest(b));
   const cancelled = visible.filter((b) => b.status === 'cancelled').reverse();
   const history = visible
     .filter(
-      (b) =>
-        b.status !== 'cancelled' &&
-        !newRequests.includes(b) &&
-        !reschedules.includes(b) &&
-        !confirmed.includes(b)
+      (b) => b.status !== 'cancelled' && !newRequests.includes(b) && !reschedules.includes(b) && !confirmed.includes(b),
     )
     .reverse();
 
@@ -320,7 +309,9 @@ export default function ProfessionalBookings() {
           const badge = changeRequested
             ? { label: 'Change requested', color: colors.info, background: colors.infoSoft }
             : status;
-          const canMove = future && (item.status === 'pending' || item.status === 'confirmed' || item.status === 'reschedule_proposed');
+          const canMove =
+            future &&
+            (item.status === 'pending' || item.status === 'confirmed' || item.status === 'reschedule_proposed');
           const canCancel = future && (item.status === 'confirmed' || item.status === 'reschedule_proposed');
           const canComplete = !future && item.status === 'confirmed';
           const faded = item.status === 'cancelled' || !future;
@@ -370,16 +361,19 @@ export default function ProfessionalBookings() {
 
               {changeRequested && item.requested_starts_at && (
                 <View style={styles.requestBox}>
-                  <Text style={styles.requestLabel}>{customerName} asked to move it to</Text>
-                  <Text style={styles.requestTime}>{formatBookingTime(item.requested_starts_at)}</Text>
-                  {item.change_reason ? <Text style={styles.requestReason}>“{item.change_reason}”</Text> : null}
+                  <Text style={styles.requestTime}>
+                    {customerName} asked for {formatBookingTime(item.requested_starts_at)}
+                  </Text>
+                  {item.change_reason ? <Text style={styles.requestReason}>Reason: {item.change_reason}</Text> : null}
                 </View>
               )}
 
               {item.status === 'reschedule_proposed' && future && (
                 <View style={styles.waitingBox}>
-                  <Text style={styles.waitingText}>Waiting for {customerName} to accept this new time.</Text>
-                  {item.change_reason ? <Text style={styles.waitingReason}>Your reason: “{item.change_reason}”</Text> : null}
+                  <Text style={styles.waitingText}>Waiting for {customerName} to reply.</Text>
+                  {item.change_reason ? (
+                    <Text style={styles.waitingReason}>Your reason: {item.change_reason}</Text>
+                  ) : null}
                 </View>
               )}
 
@@ -395,7 +389,7 @@ export default function ProfessionalBookings() {
               {!busy && changeRequested && (
                 <View style={styles.actions}>
                   <Pressable style={[styles.actionButton, styles.primary]} onPress={() => answerChange(item, true)}>
-                    <Text style={styles.primaryText}>Accept new time</Text>
+                    <Text style={styles.primaryText}>Accept</Text>
                   </Pressable>
                   <Pressable style={[styles.actionButton, styles.danger]} onPress={() => declineChange(item)}>
                     <Text style={styles.dangerText}>Decline</Text>
@@ -408,18 +402,26 @@ export default function ProfessionalBookings() {
                   <Pressable style={[styles.actionButton, styles.primary]} onPress={() => handleConfirm(item)}>
                     <Text style={styles.primaryText}>Confirm</Text>
                   </Pressable>
-                  <Pressable style={[styles.actionButton, styles.danger]} onPress={() => confirmCancel(item, 'Decline')}>
+                  <Pressable
+                    style={[styles.actionButton, styles.danger]}
+                    onPress={() => confirmCancel(item, 'Decline')}
+                  >
                     <Text style={styles.dangerText}>Decline</Text>
                   </Pressable>
                 </View>
               )}
 
               {!busy && canMove && (
-                <Link href={{ pathname: '/professional/reschedule/[bookingId]', params: { bookingId: String(item.id) } }} asChild>
+                <Link
+                  href={{ pathname: '/professional/reschedule/[bookingId]', params: { bookingId: String(item.id) } }}
+                  asChild
+                >
                   <Pressable style={styles.moveButton}>
                     <Ionicons name="time-outline" size={16} color={colors.text} />
                     <Text style={styles.moveText}>
-                      {item.status === 'reschedule_proposed' || changeRequested ? 'Suggest a different time' : 'Suggest a new time'}
+                      {item.status === 'reschedule_proposed' || changeRequested
+                        ? 'Suggest a different time'
+                        : 'Suggest a new time'}
                     </Text>
                   </Pressable>
                 </Link>
@@ -472,10 +474,22 @@ const useStyles = makeStyles((colors) => ({
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
   emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
-  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  emptyText: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
   card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
   fadedCard: { opacity: 0.7 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   serviceName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
   badgeText: { fontFamily: fonts.semiBold, fontSize: 12 },
@@ -487,12 +501,16 @@ const useStyles = makeStyles((colors) => ({
   homeTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
   homeAddress: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
   homeDetail: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
-  requestBox: { backgroundColor: colors.infoSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
-  requestLabel: { fontFamily: fonts.semiBold, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.info },
-  requestTime: { fontFamily: fonts.bold, fontSize: 15, color: colors.text, marginTop: 4 },
-  requestReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.sm },
+  requestBox: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  requestTime: { fontFamily: fonts.semiBold, fontSize: 14, lineHeight: 20, color: colors.text },
+  requestReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
   waitingBox: { marginTop: spacing.md },
-  waitingText: { fontFamily: fonts.medium, fontSize: 14, color: colors.info },
+  waitingText: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
   waitingReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginTop: 4 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md },
   price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
