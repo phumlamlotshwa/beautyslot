@@ -1,30 +1,51 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { AddressInput } from '../../components/address-input';
 import { Avatar } from '../../components/avatar';
+import { deleteAddress, getSavedAddresses, SavedAddress, saveAddress, shortAddress } from '../../lib/location';
 import { Place } from '../../lib/maps';
 import { customerPhotoUrls, deletePhoto, PhotoSource, pickPhoto, uploadPhoto } from '../../lib/photos';
 import { supabase } from '../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../lib/theme';
-import { ui } from '../../lib/ui';
+import { fonts, radius, spacing } from '../../lib/theme';
+import { makeStyles, useTheme } from '../../lib/theme-context';
+import { useUi } from '../../lib/ui';
 
 export default function CustomerProfile() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const scrollRef = useRef<ScrollView>(null);
+
   const [userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [avatarPath, setAvatarPath] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [address, setAddress] = useState<Place | null>(null);
-  const [editingAddress, setEditingAddress] = useState(false);
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [adding, setAdding] = useState(false);
   const [newAddress, setNewAddress] = useState<Place | null>(null);
+  const [newLabel, setNewLabel] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         setLoading(false);
         return;
@@ -32,9 +53,9 @@ export default function CustomerProfile() {
       setUserId(user.id);
       setEmail(user.email ?? '');
 
-      const [{ data: customer }, { data: saved }] = await Promise.all([
+      const [{ data: customer }, saved] = await Promise.all([
         supabase.from('customers').select('first_name, last_name, avatar_path').eq('id', user.id).single(),
-        supabase.from('customer_private').select('home_address, home_lat, home_lng').eq('customer_id', user.id).maybeSingle(),
+        getSavedAddresses(),
       ]);
 
       if (customer) {
@@ -45,9 +66,7 @@ export default function CustomerProfile() {
           setAvatarUrl(urls[customer.avatar_path] ?? null);
         }
       }
-      if (saved) {
-        setAddress({ address: saved.home_address, lat: saved.home_lat, lng: saved.home_lng });
-      }
+      setAddresses(saved);
       setLoading(false);
     }
 
@@ -77,7 +96,7 @@ export default function CustomerProfile() {
       setAvatarPath(newPath);
       setAvatarUrl(urls[newPath] ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update your photo.');
+      setError(e instanceof Error ? e.message : "Your photo didn't update. Try again.");
     } finally {
       setBusy(false);
     }
@@ -110,29 +129,53 @@ export default function CustomerProfile() {
     Alert.alert('Profile photo', undefined, options);
   }
 
-  async function saveAddress() {
-    if (!userId || !newAddress) return;
-    setBusy(true);
+  // Opens the add box and scrolls it up, so the search and its
+  // suggestions aren't hidden behind the keyboard
+  function startAdding() {
+    setAdding(true);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+  }
+
+  function stopAdding() {
+    setAdding(false);
+    setNewAddress(null);
+    setNewLabel('');
+  }
+
+  async function handleSaveAddress() {
+    if (!newAddress) return;
+    setSavingAddress(true);
     setError(null);
 
-    const { error: saveError } = await supabase.from('customer_private').upsert({
-      customer_id: userId,
-      home_address: newAddress.address,
-      home_lat: newAddress.lat,
-      home_lng: newAddress.lng,
-      updated_at: new Date().toISOString(),
-    });
+    const problem = await saveAddress(newAddress, newLabel.trim() || undefined);
 
-    setBusy(false);
+    setSavingAddress(false);
 
-    if (saveError) {
-      setError(saveError.message);
+    if (problem) {
+      setError(`The address wasn't saved: ${problem}`);
       return;
     }
 
-    setAddress(newAddress);
-    setEditingAddress(false);
-    setNewAddress(null);
+    setAddresses(await getSavedAddresses());
+    stopAdding();
+  }
+
+  function confirmRemove(address: SavedAddress) {
+    Alert.alert('Remove this address?', shortAddress(address.address), [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          const problem = await deleteAddress(address.id);
+          if (problem) {
+            setError(problem);
+            return;
+          }
+          setAddresses((list) => list.filter((a) => a.id !== address.id));
+        },
+      },
+    ]);
   }
 
   if (loading) {
@@ -144,90 +187,213 @@ export default function CustomerProfile() {
   }
 
   return (
-    <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <Pressable onPress={handlePhotoPress} disabled={busy}>
-          <Avatar name={name || '?'} url={avatarUrl} size={104} />
-          <View style={styles.cameraBadge}>
-            {busy ? (
-              <ActivityIndicator size="small" color={colors.onAccent} />
-            ) : (
-              <Ionicons name="camera" size={18} color={colors.onAccent} />
-            )}
+    <KeyboardAvoidingView style={ui.screen} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
+      <ScrollView
+        ref={scrollRef}
+        style={ui.screen}
+        contentContainerStyle={[ui.content, adding && { paddingBottom: 320 }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <Pressable onPress={handlePhotoPress} disabled={busy}>
+            <Avatar name={name || '?'} url={avatarUrl} size={88} />
+            <View style={styles.cameraBadge}>
+              {busy ? (
+                <ActivityIndicator size="small" color={colors.onAccent} />
+              ) : (
+                <Ionicons name="camera" size={16} color={colors.onAccent} />
+              )}
+            </View>
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.name}>{name}</Text>
+            <Text style={styles.email}>{email}</Text>
           </View>
-        </Pressable>
-        <Text style={styles.name}>{name}</Text>
-        <Text style={styles.email}>{email}</Text>
-      </View>
-
-      <View style={styles.privacyBox}>
-        <Ionicons name="lock-closed-outline" size={16} color={colors.accentDark} />
-        <Text style={styles.privacyText}>
-          Your photo is private. Only professionals you've booked or messaged can see it.
-        </Text>
-      </View>
-
-      {error && <Text style={ui.error}>{error}</Text>}
-
-      <View style={styles.card}>
-        <View style={styles.cardTitleRow}>
-          <Ionicons name="home-outline" size={20} color={colors.accentDark} />
-          <Text style={styles.cardTitle}>Home address</Text>
         </View>
-        <Text style={styles.cardHelp}>Used for home visits. Only shared with a professional once you book a visit with them.</Text>
 
-        {!editingAddress ? (
-          <>
-            <Text style={styles.addressText}>{address ? address.address : 'No address saved yet.'}</Text>
-            <Pressable style={styles.linkButton} onPress={() => setEditingAddress(true)}>
-              <Text style={styles.linkText}>{address ? 'Change address' : 'Add address'}</Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <AddressInput value={newAddress} onChange={setNewAddress} />
-            <View style={styles.buttons}>
-              <Pressable
-                style={styles.cancelButton}
-                onPress={() => {
-                  setEditingAddress(false);
-                  setNewAddress(null);
-                }}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.saveButton, (!newAddress || busy) && ui.buttonDisabled]}
-                onPress={saveAddress}
-                disabled={!newAddress || busy}
-              >
-                <Text style={styles.saveText}>Save</Text>
+        <View style={styles.privacyBox}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.text} />
+          <Text style={styles.privacyText}>
+            Your photo is private. Only professionals you've booked or messaged can see it.
+          </Text>
+        </View>
+
+        {error && <Text style={ui.error}>{error}</Text>}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>My addresses</Text>
+          <Text style={styles.cardHelp}>
+            For home visits. A professional only sees an address once you book a visit with them.
+          </Text>
+
+          {addresses.length === 0 && !adding && <Text style={styles.empty}>No saved addresses yet.</Text>}
+
+          {addresses.map((a) => (
+            <View key={a.id} style={styles.addressRow}>
+              <Ionicons
+                name={a.label?.toLowerCase() === 'work' ? 'briefcase-outline' : 'home-outline'}
+                size={18}
+                color={colors.textMuted}
+              />
+              <View style={{ flex: 1 }}>
+                {!!a.label && <Text style={styles.addressLabel}>{a.label}</Text>}
+                <Text style={styles.addressText}>{a.address}</Text>
+              </View>
+              <Pressable onPress={() => confirmRemove(a)} hitSlop={10}>
+                <Ionicons name="close" size={20} color={colors.textMuted} />
               </Pressable>
             </View>
-          </>
-        )}
-      </View>
-    </ScrollView>
+          ))}
+
+          {adding ? (
+            <View style={styles.addBox}>
+              <AddressInput
+                value={newAddress}
+                onChange={(place) => {
+                  setNewAddress(place);
+                  setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+                }}
+              />
+
+              {newAddress && (
+                <>
+                  <Text style={styles.nameLabel}>Name it (optional)</Text>
+                  <View style={styles.nameChips}>
+                    {['Home', 'Work'].map((n) => (
+                      <Pressable
+                        key={n}
+                        style={[ui.chip, newLabel === n && ui.chipSelected]}
+                        onPress={() => setNewLabel(newLabel === n ? '' : n)}
+                      >
+                        <Text style={[ui.chipText, newLabel === n && ui.chipTextSelected]}>{n}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <TextInput
+                    style={[ui.input, { marginTop: spacing.sm }]}
+                    value={newLabel}
+                    onChangeText={setNewLabel}
+                    placeholder="Or type your own name for it"
+                    placeholderTextColor={colors.textFaint}
+                    maxLength={30}
+                  />
+                </>
+              )}
+
+              <View style={styles.buttons}>
+                <Pressable style={styles.cancelButton} onPress={stopAdding}>
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.saveButton, (!newAddress || savingAddress) && ui.buttonDisabled]}
+                  onPress={handleSaveAddress}
+                  disabled={!newAddress || savingAddress}
+                >
+                  {savingAddress ? (
+                    <ActivityIndicator color={colors.onAccent} />
+                  ) : (
+                    <Text style={styles.saveText}>Save address</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable style={styles.addButton} onPress={startAdding}>
+              <Ionicons name="add" size={18} color={colors.text} />
+              <Text style={styles.addText}>Add an address</Text>
+            </Pressable>
+          )}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  header: { alignItems: 'center', marginBottom: spacing.xl },
-  cameraBadge: { position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.background },
-  name: { fontFamily: fonts.bold, fontSize: 22, color: colors.text, marginTop: spacing.md },
-  email: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 2 },
-  privacyBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.lg },
-  privacyText: { flex: 1, fontFamily: fonts.regular, fontSize: 13, color: colors.accentDark },
-  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+const useStyles = makeStyles((colors) => ({
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginBottom: spacing.xl },
+  cameraBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.accentDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.background,
+  },
+  name: { fontFamily: fonts.extraBold, fontSize: 22, lineHeight: 26, color: colors.text },
+  email: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 4 },
+  privacyBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  privacyText: { flex: 1, fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.text },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg },
   cardTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
-  cardHelp: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
-  addressText: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
-  linkButton: { alignSelf: 'flex-start', marginTop: spacing.md },
-  linkText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
-  buttons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  cancelButton: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
-  cancelText: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
-  saveButton: { flex: 1, backgroundColor: colors.accentDark, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
-  saveText: { fontFamily: fonts.medium, fontSize: 15, color: colors.onAccent },
-});
+  cardHelp: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  empty: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginBottom: spacing.sm },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  addressLabel: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text, marginBottom: 2 },
+  addressText: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 19, color: colors.textMuted },
+  addBox: { marginTop: spacing.md },
+  nameLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  nameChips: { flexDirection: 'row', gap: spacing.sm },
+  buttons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  cancelButton: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  cancelText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
+  saveButton: {
+    flex: 1,
+    backgroundColor: colors.accentDark,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  saveText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.onAccent },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: colors.accentDark,
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: spacing.md,
+  },
+  addText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
+}));
