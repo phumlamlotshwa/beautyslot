@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { getPlace, Place, searchAddresses, Suggestion } from '../lib/maps';
-import { colors, fonts, radius, spacing } from '../lib/theme';
-import { ui } from '../lib/ui';
+import { fonts, radius, spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
+import { useUi } from '../lib/ui';
 
 type Props = {
   value: Place | null;
@@ -12,6 +13,9 @@ type Props = {
 };
 
 export function AddressInput({ value, onChange, placeholder = 'Start typing your address' }: Props) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [query, setQuery] = useState(value?.address ?? '');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [searching, setSearching] = useState(false);
@@ -42,7 +46,7 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
         if (latestQuery.current === text) setSuggestions(results);
       } catch (e) {
         if (latestQuery.current === text) {
-          setError(e instanceof Error ? e.message : 'Address search failed.');
+          setError(e instanceof Error ? e.message : "Address search isn't working right now. Check your connection and try again.");
         }
       } finally {
         if (latestQuery.current === text) setSearching(false);
@@ -67,7 +71,7 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
       setQuery(place.address);
       onChange(place);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load that address.');
+      setError(e instanceof Error ? e.message : "That address didn't load. Pick it from the list again.");
     } finally {
       setChoosing(false);
     }
@@ -85,13 +89,13 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
           placeholderTextColor={colors.textFaint}
           autoCorrect={false}
         />
-        {(searching || choosing) && <ActivityIndicator style={styles.spinner} color={colors.accentDark} />}
+        {(searching || choosing) && <ActivityIndicator style={styles.spinner} color={colors.text} />}
       </View>
 
       {value && (
         <View style={styles.confirmedRow}>
-          <Ionicons name="checkmark-circle" size={16} color={colors.accentDark} />
-          <Text style={styles.confirmed}>Address confirmed</Text>
+          <Ionicons name="checkmark-circle" size={16} color={colors.text} />
+          <Text style={styles.confirmed}>Address found</Text>
         </View>
       )}
       {error && <Text style={ui.error}>{error}</Text>}
@@ -111,15 +115,23 @@ export function AddressInput({ value, onChange, placeholder = 'Start typing your
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   inputRow: { flexDirection: 'row', alignItems: 'center' },
   searchIcon: { position: 'absolute', left: 12, zIndex: 1 },
   input: { flex: 1, paddingLeft: 38, paddingRight: 40 },
   spinner: { position: 'absolute', right: 12 },
   confirmedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
-  confirmed: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
-  list: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, marginTop: spacing.xs, overflow: 'hidden' },
-  option: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 12, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  optionText: { flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.text },
+  confirmed: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
+  list: { backgroundColor: colors.surface, borderRadius: radius.sm, marginTop: spacing.xs, overflow: 'hidden' },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  optionText: { flex: 1, fontFamily: fonts.regular, fontSize: 15, lineHeight: 20, color: colors.text },
   attribution: { fontFamily: fonts.regular, fontSize: 11, color: colors.textFaint, textAlign: 'right', padding: 6 },
-});
+}));
