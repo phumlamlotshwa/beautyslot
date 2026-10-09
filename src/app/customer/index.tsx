@@ -1,17 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StatusBar, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Avatar } from '../../components/avatar';
+import { CountBadge } from '../../components/count-badge';
 import { LocationBar } from '../../components/location-bar';
 import { MessagesButton } from '../../components/messages-button';
 import { professionLabels } from '../../lib/format';
 import { CustomerLocation, distanceKm, formatDistance, getStartingLocation } from '../../lib/location';
-import { supabase } from '../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../lib/theme';
-import { ui } from '../../lib/ui';
-import { Avatar } from '../../components/avatar';
-import { CountBadge } from '../../components/count-badge';
 import { customerPhotoUrls, professionalPhotoUrl } from '../../lib/photos';
+import { supabase } from '../../lib/supabase';
+import { fonts, radius, spacing } from '../../lib/theme';
+import { makeStyles, useTheme } from '../../lib/theme-context';
+import { useUi } from '../../lib/ui';
 
 type Professional = {
   id: string;
@@ -26,10 +28,10 @@ type Professional = {
 
 const filters = [
   { value: 'all', label: 'All' },
+  { value: 'hairdresser', label: 'Hair' },
   { value: 'barber', label: 'Barber' },
-  { value: 'hairdresser', label: 'Hairdresser' },
-  { value: 'makeup_artist', label: 'Makeup artist' },
-  { value: 'nail_artist', label: 'Nail artist' },
+  { value: 'nail_artist', label: 'Nails' },
+  { value: 'makeup_artist', label: 'Makeup' },
 ];
 
 const distances: { value: number | null; label: string }[] = [
@@ -41,6 +43,11 @@ const distances: { value: number | null; label: string }[] = [
 ];
 
 export default function CustomerHome() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors, scheme } = useTheme();
+  const insets = useSafeAreaInsets();
+
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [filter, setFilter] = useState('all');
   const [customerLocation, setCustomerLocation] = useState<CustomerLocation | null>(null);
@@ -56,6 +63,14 @@ export default function CustomerHome() {
       if (location) setCustomerLocation(location);
     });
   }, []);
+
+  // The banner at the top is black, so the clock and battery are white here
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      return () => StatusBar.setBarStyle(scheme === 'dark' ? 'light-content' : 'dark-content');
+    }, [scheme])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -123,34 +138,37 @@ export default function CustomerHome() {
     router.replace('/');
   }
 
-  let emptyMessage = 'No professionals yet. Check back soon.';
+  let emptyMessage = "Nobody's taking bookings here yet. Check back soon.";
   if (customerLocation && maxDistance !== null) {
-    emptyMessage = `No professionals within ${maxDistance} km yet. Try a bigger distance.`;
+    emptyMessage = `Nobody within ${maxDistance} km yet. Try a bigger distance.`;
   } else if (filter !== 'all') {
     emptyMessage = `No ${professionLabels[filter].toLowerCase()}s yet. Check back soon.`;
   }
 
   return (
     <View style={ui.screen}>
+      <View style={[styles.banner, { paddingTop: insets.top + spacing.lg }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.greeting}>{myName ? `Hi ${myName}` : 'Hi'}</Text>
+          <Text style={styles.bannerTitle}>Book someone near you</Text>
+        </View>
+        <Link href="/customer/profile" asChild>
+          <Pressable hitSlop={8}>
+            <Avatar name={myName || '?'} url={myAvatarUrl} size={44} />
+          </Pressable>
+        </Link>
+      </View>
+
       <FlatList
         data={shownProfessionals}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={ui.content}
+        contentContainerStyle={styles.content}
         ListHeaderComponent={
           <>
-            <View style={styles.titleRow}>
-              <Text style={[ui.title, { marginBottom: 0, flex: 1 }]}>Find a professional</Text>
-              <Link href="/customer/profile" asChild>
-                <Pressable hitSlop={8}>
-                  <Avatar name={myName || '?'} url={myAvatarUrl} size={42} />
-                </Pressable>
-              </Link>
-            </View>
-
             <View style={styles.topRow}>
               <Link href="/customer/bookings" asChild>
                 <Pressable style={styles.topButton}>
-                  <Ionicons name="calendar-outline" size={20} color={colors.accentDark} />
+                  <Ionicons name="calendar-outline" size={20} color={colors.text} />
                   <Text style={styles.topButtonText}>My bookings</Text>
                   <CountBadge count={waitingCount} />
                 </Pressable>
@@ -180,7 +198,9 @@ export default function CustomerHome() {
                     style={[styles.distanceChip, maxDistance === d.value && styles.distanceChipSelected]}
                     onPress={() => setMaxDistance(d.value)}
                   >
-                    <Text style={[styles.distanceText, maxDistance === d.value && styles.distanceTextSelected]}>{d.label}</Text>
+                    <Text style={[styles.distanceText, maxDistance === d.value && styles.distanceTextSelected]}>
+                      {d.label}
+                    </Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -199,23 +219,16 @@ export default function CustomerHome() {
         renderItem={({ item }) => (
           <Link href={{ pathname: '/customer/professional/[id]', params: { id: item.id } }} asChild>
             <Pressable style={styles.card}>
-              <View style={{ marginRight: spacing.md }}>
-                <Avatar name={item.first_name} url={professionalPhotoUrl(item.avatar_path)} size={52} />
-              </View>
+              <Avatar name={item.first_name} url={professionalPhotoUrl(item.avatar_path)} size={52} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>
                   {item.first_name} {item.last_name}
                 </Text>
                 <Text style={styles.details}>
                   {professionLabels[item.profession] ?? item.profession}
-                  {item.location ? ` · ${item.location}` : ''}
+                  {item.location ? ` in ${item.location}` : ''}
                 </Text>
-                {item.km !== null && (
-                  <View style={styles.distanceRow}>
-                    <Ionicons name="location-outline" size={14} color={colors.accentDark} />
-                    <Text style={styles.distance}>{formatDistance(item.km)}</Text>
-                  </View>
-                )}
+                {item.km !== null && <Text style={styles.distance}>{formatDistance(item.km)}</Text>}
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
             </Pressable>
@@ -231,7 +244,25 @@ export default function CustomerHome() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.md,
+    backgroundColor: colors.header,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
+  greeting: { fontFamily: fonts.regular, fontSize: 15, color: colors.onHeaderMuted },
+  bannerTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 28,
+    lineHeight: 32,
+    letterSpacing: -0.4,
+    color: colors.onHeader,
+    marginTop: 4,
+  },
+  content: { padding: spacing.xl, paddingBottom: 48 },
   topRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   topButton: {
     flex: 1,
@@ -240,24 +271,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.md,
     padding: 14,
   },
-  topButtonText: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
+  topButtonText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
   filters: { gap: spacing.sm, paddingBottom: spacing.md },
-  distanceChip: { borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 14, backgroundColor: 'transparent' },
-  distanceChipSelected: { backgroundColor: colors.accentSoft },
+  distanceChip: { borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 14 },
+  distanceChipSelected: { backgroundColor: colors.surface },
   distanceText: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
-  distanceTextSelected: { fontFamily: fonts.medium, color: colors.accentDark },
-  empty: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xxl },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  distanceTextSelected: { fontFamily: fonts.semiBold, color: colors.text },
+  empty: {
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    lineHeight: 23,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
   name: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   details: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 2 },
-  distanceRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-  distance: { fontFamily: fonts.medium, fontSize: 13, color: colors.accentDark },
+  distance: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.text, marginTop: 6 },
   logOut: { alignItems: 'center', padding: spacing.lg, marginTop: spacing.lg },
   logOutText: { fontFamily: fonts.medium, fontSize: 15, color: colors.textMuted },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
-});
+}));
