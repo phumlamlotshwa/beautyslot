@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { colors, fonts, radius, spacing } from '../lib/theme';
-import { ui } from '../lib/ui';
+import { fonts, spacing } from '../lib/theme';
+import { makeStyles, useTheme } from '../lib/theme-context';
+import { useUi } from '../lib/ui';
 import { Avatar } from '../components/avatar';
+import { CountBadge } from '../components/count-badge';
 import { customerPhotoUrls, professionalPhotoUrl } from '../lib/photos';
 
 type Person = { first_name: string; last_name: string; avatar_path: string | null } | null;
@@ -37,6 +39,9 @@ function formatWhen(iso: string) {
 }
 
 export default function Messages() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [myId, setMyId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
@@ -60,7 +65,7 @@ export default function Messages() {
 
         const { data, error: loadError } = await supabase
           .from('conversations')
-            .select(
+          .select(
             'id, customer_id, last_message_at, customers(first_name, last_name, avatar_path), professionals(first_name, last_name, avatar_path), messages(body, created_at, sender_id)'
           )
           .order('last_message_at', { ascending: false })
@@ -117,7 +122,7 @@ export default function Messages() {
           <View style={styles.emptyBox}>
             <Ionicons name="chatbubbles-outline" size={40} color={colors.textFaint} />
             <Text style={styles.emptyTitle}>No messages yet</Text>
-            <Text style={styles.emptyText}>Your conversations will show up here.</Text>
+            <Text style={styles.emptyText}>When you message someone, or someone messages you, the chat shows up here.</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -152,11 +157,7 @@ export default function Messages() {
                     <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>
                       {preview}
                     </Text>
-                    {unread > 0 && (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{unread}</Text>
-                      </View>
-                    )}
+                    <CountBadge count={unread} />
                   </View>
                 </View>
               </Pressable>
@@ -168,20 +169,32 @@ export default function Messages() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   list: { paddingVertical: spacing.sm, flexGrow: 1 },
   emptyBox: { alignItems: 'center', marginTop: 80, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: spacing.md },
-  emptyText: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, marginTop: spacing.xs },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  emptyText: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
   rowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
   name: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: colors.text },
   nameUnread: { fontFamily: fonts.bold },
   when: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint },
-  whenUnread: { fontFamily: fonts.medium, color: colors.accentDark },
+  whenUnread: { fontFamily: fonts.semiBold, color: colors.text },
   preview: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
   previewUnread: { fontFamily: fonts.medium, color: colors.text },
-  badge: { minWidth: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  badgeText: { fontFamily: fonts.bold, fontSize: 12, color: colors.onAccent },
-});
+}));
