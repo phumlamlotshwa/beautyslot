@@ -8,6 +8,8 @@ import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
 import { colors, fonts, radius, spacing } from '../../lib/theme';
 import { ui } from '../../lib/ui';
+import { Avatar } from '../../components/avatar';
+import { customerPhotoUrls } from '../../lib/photos';
 
 type Booking = {
   id: number;
@@ -20,7 +22,7 @@ type Booking = {
   call_out_fee: number;
   travel_minutes: number;
   services: { name: string; price: number } | null;
-  customers: { first_name: string; last_name: string } | null;
+  customers: { first_name: string; last_name: string; avatar_path: string | null } | null;
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -39,6 +41,7 @@ export default function ProfessionalBookings() {
   const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
   const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
   const [error, setError] = useState<string | null>(null);
+  const [customerAvatars, setCustomerAvatars] = useState<Record<string, string>>({});
 
   function toggleSection(title: string) {
     setClosed((current) => {
@@ -65,7 +68,7 @@ export default function ProfessionalBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, services(name, price), customers(first_name, last_name)'
+        'id, starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, services(name, price), customers(first_name, last_name, avatar_path)'
       )
       .eq('professional_id', user.id)
       .order('starts_at', { ascending: true });
@@ -73,7 +76,9 @@ export default function ProfessionalBookings() {
     if (loadError) {
       setError(loadError.message);
     } else {
-      setBookings((data ?? []) as unknown as Booking[]);
+            const list = (data ?? []) as unknown as Booking[];
+      setBookings(list);
+      setCustomerAvatars(await customerPhotoUrls(list.map((b) => b.customers?.avatar_path)));
     }
 
     setLoading(false);
@@ -226,8 +231,12 @@ export default function ProfessionalBookings() {
                 </View>
               </View>
 
-              <View style={styles.line}>
-                <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+                            <View style={styles.personRow}>
+                <Avatar
+                  name={item.customers?.first_name ?? '?'}
+                  url={customerAvatars[item.customers?.avatar_path ?? ''] ?? null}
+                  size={28}
+                />
                 <Text style={styles.lineText}>
                   {item.customers?.first_name} {item.customers?.last_name}
                 </Text>
@@ -349,4 +358,5 @@ const styles = StyleSheet.create({
   moveText: { fontFamily: fonts.medium, fontSize: 15, color: colors.accentDark },
   cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
   cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
 });

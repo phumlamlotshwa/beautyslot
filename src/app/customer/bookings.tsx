@@ -7,6 +7,8 @@ import { BookingStatus, statusStyle } from '../../lib/status';
 import { supabase } from '../../lib/supabase';
 import { colors, fonts, radius, spacing } from '../../lib/theme';
 import { ui } from '../../lib/ui';
+import { Avatar } from '../../components/avatar';
+import { professionalPhotoUrl } from '../../lib/photos';
 
 type Booking = {
   id: number;
@@ -17,7 +19,7 @@ type Booking = {
   address: string | null;
   call_out_fee: number;
   services: { name: string; price: number } | null;
-  professionals: { first_name: string; last_name: string } | null;
+  professionals: { first_name: string; last_name: string; avatar_path: string | null } | null;
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -66,7 +68,7 @@ export default function MyBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, previous_starts_at, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name)'
+        'id, starts_at, previous_starts_at, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path)'
       )
       .eq('customer_id', user.id)
       .order('starts_at', { ascending: true });
@@ -239,8 +241,12 @@ export default function MyBookings() {
                 </View>
               </View>
 
-              <View style={styles.line}>
-                <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+              <View style={styles.personRow}>
+                <Avatar
+                  name={item.professionals?.first_name ?? '?'}
+                  url={professionalPhotoUrl(item.professionals?.avatar_path ?? null)}
+                  size={28}
+                />
                 <Text style={styles.lineText}>
                   {item.professionals?.first_name} {item.professionals?.last_name}
                 </Text>
@@ -357,4 +363,5 @@ const styles = StyleSheet.create({
   dangerText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
   cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
   cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
+    personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
 });

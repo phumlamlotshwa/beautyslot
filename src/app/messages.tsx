@@ -5,8 +5,10 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { supabase } from '../lib/supabase';
 import { colors, fonts, radius, spacing } from '../lib/theme';
 import { ui } from '../lib/ui';
+import { Avatar } from '../components/avatar';
+import { customerPhotoUrls, professionalPhotoUrl } from '../lib/photos';
 
-type Person = { first_name: string; last_name: string } | null;
+type Person = { first_name: string; last_name: string; avatar_path: string | null } | null;
 
 type LastMessage = {
   body: string;
@@ -40,6 +42,7 @@ export default function Messages() {
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [customerAvatars, setCustomerAvatars] = useState<Record<string, string>>({});
 
   useFocusEffect(
     useCallback(() => {
@@ -57,8 +60,8 @@ export default function Messages() {
 
         const { data, error: loadError } = await supabase
           .from('conversations')
-          .select(
-            'id, customer_id, last_message_at, customers(first_name, last_name), professionals(first_name, last_name), messages(body, created_at, sender_id)'
+            .select(
+            'id, customer_id, last_message_at, customers(first_name, last_name, avatar_path), professionals(first_name, last_name, avatar_path), messages(body, created_at, sender_id)'
           )
           .order('last_message_at', { ascending: false })
           .order('created_at', { referencedTable: 'messages', ascending: false })
@@ -81,7 +84,12 @@ export default function Messages() {
           counts[row.conversation_id] = (counts[row.conversation_id] ?? 0) + 1;
         }
 
-        setConversations((data ?? []) as unknown as Conversation[]);
+        const list = (data ?? []) as unknown as Conversation[];
+        const customerPaths = list
+          .filter((c) => c.customer_id !== user.id)
+          .map((c) => c.customers?.avatar_path);
+        setCustomerAvatars(await customerPhotoUrls(customerPaths));
+        setConversations(list);
         setUnreadCounts(counts);
         setLoading(false);
       }
@@ -118,6 +126,9 @@ export default function Messages() {
           const name = other ? `${other.first_name} ${other.last_name}` : 'Unknown';
           const last = item.messages[0];
           const unread = unreadCounts[item.id] ?? 0;
+          const avatarUrl = iAmCustomer
+            ? professionalPhotoUrl(item.professionals?.avatar_path ?? null)
+            : customerAvatars[item.customers?.avatar_path ?? ''] ?? null;
 
           let preview = 'No messages yet';
           if (last) preview = last.sender_id === myId ? `You: ${last.body}` : last.body;
@@ -125,8 +136,8 @@ export default function Messages() {
           return (
             <Link href={{ pathname: '/chat/[conversationId]', params: { conversationId: String(item.id) } }} asChild>
               <Pressable style={styles.row}>
-                <View style={ui.avatar}>
-                  <Text style={ui.avatarText}>{name.charAt(0)}</Text>
+                <View style={{ marginRight: spacing.md }}>
+                  <Avatar name={name} url={avatarUrl} size={48} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.rowTop}>
