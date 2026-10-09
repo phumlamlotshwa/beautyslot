@@ -103,6 +103,7 @@ export default function ProfessionalHome() {
               .select('id', { count: 'exact', head: true })
               .eq('professional_id', user.id)
               .eq('status', 'pending')
+              .is('proposed_price', null)
               .gte('starts_at', now),
             supabase
               .from('bookings')

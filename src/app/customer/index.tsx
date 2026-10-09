@@ -106,7 +106,7 @@ export default function CustomerHome() {
 
           const now = new Date().toISOString();
 
-          const [{ count: suggested }, { count: declined }] = await Promise.all([
+          const [{ count: suggested }, { count: declined }, { count: newPrices }] = await Promise.all([
             supabase
               .from('bookings')
               .select('id', { count: 'exact', head: true })
@@ -121,9 +121,16 @@ export default function CustomerHome() {
               .not('declined_starts_at', 'is', null)
               .is('requested_starts_at', null)
               .gte('starts_at', now),
+            supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .eq('customer_id', user.id)
+              .eq('status', 'pending')
+              .not('proposed_price', 'is', null)
+              .gte('starts_at', now),
           ]);
 
-          setWaitingCount((suggested ?? 0) + (declined ?? 0));
+          setWaitingCount((suggested ?? 0) + (declined ?? 0) + (newPrices ?? 0));
         }
 
         setLoading(false);

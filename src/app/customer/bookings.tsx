@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, SectionList, Text, View } from 'react-native';
@@ -10,6 +11,7 @@ import { makeStyles, useTheme } from '../../lib/theme-context';
 import { useUi } from '../../lib/ui';
 import { Avatar } from '../../components/avatar';
 import { CountBadge } from '../../components/count-badge';
+import { PhotoViewer } from '../../components/photo-viewer';
 import { professionalPhotoUrl } from '../../lib/photos';
 import { shortAddress } from '../../lib/location';
 
@@ -20,6 +22,11 @@ type Booking = {
   requested_starts_at: string | null;
   declined_starts_at: string | null;
   change_reason: string | null;
+  reference_photo_id: number | null;
+  reference_path: string | null;
+  agreed_price: number | null;
+  proposed_price: number | null;
+  price_reason: string | null;
   status: BookingStatus;
   location_type: 'at_professional' | 'at_customer';
   address: string | null;
@@ -63,6 +70,8 @@ export default function MyBookings() {
   const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+  const [referenceUrls, setReferenceUrls] = useState<Record<number, string>>({});
+  const [viewing, setViewing] = useState<string | null>(null);
 
   function toggleSection(title: string) {
     setOpenSections((current) => {
@@ -74,6 +83,35 @@ export default function MyBookings() {
       }
       return next;
     });
+  }
+
+  async function loadReferenceUrls(list: Booking[]) {
+    const urls: Record<number, string> = {};
+
+    const photoIds = list.filter((b) => b.reference_photo_id).map((b) => b.reference_photo_id!);
+    if (photoIds.length > 0) {
+      const { data } = await supabase.from('portfolio_photos').select('id, path').in('id', photoIds);
+      const paths = new Map<number, string>((data ?? []).map((p: { id: number; path: string }) => [p.id, p.path]));
+      for (const b of list) {
+        const path = b.reference_photo_id ? paths.get(b.reference_photo_id) : null;
+        const url = path ? professionalPhotoUrl(path) : null;
+        if (url) urls[b.id] = url;
+      }
+    }
+
+    const withOwn = list.filter((b) => b.reference_path);
+    if (withOwn.length > 0) {
+      const { data } = await supabase.storage.from('booking-photos').createSignedUrls(
+        withOwn.map((b) => b.reference_path!),
+        60 * 60,
+      );
+      withOwn.forEach((b, i) => {
+        const url = data?.[i]?.signedUrl;
+        if (url) urls[b.id] = url;
+      });
+    }
+
+    return urls;
   }
 
   const loadBookings = useCallback(async () => {
@@ -91,7 +129,7 @@ export default function MyBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, previous_starts_at, requested_starts_at, declined_starts_at, change_reason, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)',
+        'id, starts_at, previous_starts_at, requested_starts_at, declined_starts_at, change_reason, reference_photo_id, reference_path, agreed_price, proposed_price, price_reason, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)',
       )
       .eq('customer_id', user.id)
       .order('starts_at', { ascending: true });
@@ -104,6 +142,7 @@ export default function MyBookings() {
 
     const loaded = (data ?? []) as unknown as Booking[];
     setBookings(loaded);
+    setReferenceUrls(await loadReferenceUrls(loaded));
 
     const now = Date.now();
     const needsAddress = loaded.filter(
@@ -145,6 +184,32 @@ export default function MyBookings() {
     }
 
     loadBookings();
+  }
+
+  async function answerPrice(booking: Booking, accept: boolean) {
+    setError(null);
+    setAnsweringId(booking.id);
+
+    const { error: priceError } = await supabase.rpc('respond_to_price', {
+      p_booking_id: booking.id,
+      p_accept: accept,
+    });
+
+    setAnsweringId(null);
+
+    if (priceError) {
+      setError(priceError.code === 'P0001' ? priceError.message : "That didn't go through. Try again.");
+      return;
+    }
+
+    loadBookings();
+  }
+
+  function declinePrice(booking: Booking) {
+    Alert.alert(`Decline ${formatPrice(booking.proposed_price ?? 0)}?`, 'This cancels your booking.', [
+      { text: 'Go back', style: 'cancel' },
+      { text: 'Decline', style: 'destructive', onPress: () => answerPrice(booking, false) },
+    ]);
   }
 
   function handleDecline(booking: Booking) {
@@ -207,6 +272,7 @@ export default function MyBookings() {
   const isMyRequest = (b: Booking) =>
     isFuture(b) && (b.status === 'pending' || b.status === 'confirmed') && !!b.requested_starts_at;
   const isTheirSuggestion = (b: Booking) => b.status === 'reschedule_proposed' && isFuture(b);
+  const isPriceWaiting = (b: Booking) => b.status === 'pending' && b.proposed_price !== null && isFuture(b);
   const isDeclined = (b: Booking) =>
     isFuture(b) &&
     (b.status === 'pending' || b.status === 'confirmed') &&
@@ -235,7 +301,7 @@ export default function MyBookings() {
     { title: 'Reschedules', items: reschedules, needsAction: reschedules.filter(isTheirSuggestion).length },
     { title: 'Declined', items: declined, needsAction: declined.length },
     { title: 'Confirmed', items: confirmed, needsAction: 0 },
-    { title: 'Pending', items: pending, needsAction: 0 },
+    { title: 'Pending', items: pending, needsAction: pending.filter(isPriceWaiting).length },
     { title: 'Cancelled', items: cancelled, needsAction: 0 },
     { title: 'History', items: history, needsAction: 0 },
   ]
@@ -288,7 +354,11 @@ export default function MyBookings() {
           const isProposal = item.status === 'reschedule_proposed' && future;
           const canCancel = future && (item.status === 'pending' || item.status === 'confirmed');
           const isHome = item.location_type === 'at_customer';
-          const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
+          const usualPrice = Number(item.services?.price ?? 0);
+          const servicePrice = item.agreed_price !== null ? Number(item.agreed_price) : usualPrice;
+          const total = servicePrice + Number(item.call_out_fee);
+          const priceWaiting = isPriceWaiting(item);
+          const referenceUrl = referenceUrls[item.id];
           const answering = answeringId === item.id;
           const showProAddress = future && !isHome && item.status === 'confirmed';
           const proAddress = proAddresses[item.id];
@@ -297,11 +367,13 @@ export default function MyBookings() {
           const hasRequest = canCancel && !!item.requested_starts_at;
           const wasDeclined = isDeclined(item);
           const proFirstName = item.professionals?.first_name ?? 'them';
-          const badge = hasRequest
-            ? { label: 'Change requested', color: colors.info, background: colors.infoSoft }
-            : wasDeclined
-              ? { label: 'Change declined', color: colors.danger, background: colors.dangerSoft }
-              : status;
+          const badge = priceWaiting
+            ? { label: 'New price', color: colors.info, background: colors.infoSoft }
+            : hasRequest
+              ? { label: 'Change requested', color: colors.info, background: colors.infoSoft }
+              : wasDeclined
+                ? { label: 'Change declined', color: colors.danger, background: colors.dangerSoft }
+                : status;
 
           return (
             <View style={[styles.card, isProposal && styles.proposalCard, faded && styles.fadedCard]}>
@@ -358,6 +430,26 @@ export default function MyBookings() {
                 </View>
               )}
 
+              {referenceUrl && (
+                <Pressable style={styles.referenceRow} onPress={() => setViewing(referenceUrl)}>
+                  <Image source={{ uri: referenceUrl }} style={styles.referenceImage} contentFit="cover" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.referenceTitle}>{item.reference_path ? 'Your photo' : 'From their work'}</Text>
+                    <Text style={styles.referenceHint}>Tap to see it bigger</Text>
+                  </View>
+                </Pressable>
+              )}
+
+              {priceWaiting && item.proposed_price !== null && (
+                <View style={styles.requestBox}>
+                  <Text style={styles.requestTime}>
+                    {item.professionals?.first_name ?? 'They'} asked for {formatPrice(item.proposed_price)} (usually{' '}
+                    {formatPrice(usualPrice)})
+                  </Text>
+                  {item.price_reason ? <Text style={styles.requestReason}>Reason: {item.price_reason}</Text> : null}
+                </View>
+              )}
+
               {hasRequest && item.requested_starts_at && (
                 <View style={styles.requestBox}>
                   <Text style={styles.requestTime}>You asked for {formatBookingTime(item.requested_starts_at)}</Text>
@@ -396,10 +488,16 @@ export default function MyBookings() {
 
               <View style={styles.priceRow}>
                 <Text style={styles.price}>{formatPrice(total)}</Text>
+                {item.agreed_price !== null && Number(item.agreed_price) !== usualPrice && (
+                  <Text style={styles.priceNote}>usually {formatPrice(usualPrice)}</Text>
+                )}
                 {isHome && Number(item.call_out_fee) > 0 && (
                   <Text style={styles.priceNote}>incl. {formatPrice(item.call_out_fee)} call-out</Text>
                 )}
               </View>
+              {item.agreed_price !== null && item.price_reason ? (
+                <Text style={styles.priceReason}>{item.price_reason}</Text>
+              ) : null}
 
               {answering && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
 
@@ -409,6 +507,17 @@ export default function MyBookings() {
                     <Text style={styles.primaryText}>Accept</Text>
                   </Pressable>
                   <Pressable style={[styles.actionButton, styles.danger]} onPress={() => handleDecline(item)}>
+                    <Text style={styles.dangerText}>Decline</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {!answering && priceWaiting && (
+                <View style={styles.actions}>
+                  <Pressable style={[styles.actionButton, styles.primary]} onPress={() => answerPrice(item, true)}>
+                    <Text style={styles.primaryText}>Accept</Text>
+                  </Pressable>
+                  <Pressable style={[styles.actionButton, styles.danger]} onPress={() => declinePrice(item)}>
                     <Text style={styles.dangerText}>Decline</Text>
                   </Pressable>
                 </View>
@@ -430,7 +539,7 @@ export default function MyBookings() {
                 </>
               )}
 
-              {!answering && canCancel && !wasDeclined && (
+              {!answering && canCancel && !wasDeclined && !priceWaiting && (
                 <View style={styles.linkRow}>
                   <Pressable style={styles.changeButton} onPress={() => openChangeTime(item)}>
                     <Ionicons name="time-outline" size={16} color={colors.text} />
@@ -444,6 +553,12 @@ export default function MyBookings() {
             </View>
           );
         }}
+      />
+
+      <PhotoViewer
+        photos={viewing ? [{ id: 0, url: viewing, caption: null }] : []}
+        startIndex={viewing ? 0 : null}
+        onClose={() => setViewing(null)}
       />
     </View>
   );
@@ -502,6 +617,19 @@ const useStyles = makeStyles((colors) => ({
     color: colors.textMuted,
     marginTop: spacing.sm,
   },
+  referenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginTop: spacing.md,
+  },
+  referenceImage: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.accentSoft },
+  referenceTitle: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
+  referenceHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  priceReason: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: 2 },
   requestBox: {
     backgroundColor: colors.accentSoft,
     borderRadius: radius.sm,
