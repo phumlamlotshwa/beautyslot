@@ -34,6 +34,7 @@ type Booking = {
   reference_path: string | null;
   agreed_price: number | null;
   proposed_price: number | null;
+  price_reason: string | null;
   services: { name: string; price: number } | null;
   customers: { first_name: string; last_name: string; avatar_path: string | null } | null;
 };
@@ -59,6 +60,7 @@ export default function ProfessionalBookings() {
   const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
   const [pricing, setPricing] = useState<Booking | null>(null);
   const [chosenPrice, setChosenPrice] = useState<number | null>(null);
+  const [chosenReason, setChosenReason] = useState<string | null>(null);
   const [referenceUrls, setReferenceUrls] = useState<Record<number, string>>({});
   const [viewing, setViewing] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
@@ -91,7 +93,7 @@ export default function ProfessionalBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, requested_starts_at, change_reason, reference_photo_id, reference_path, agreed_price, proposed_price, services(name, price), customers(first_name, last_name, avatar_path)',
+        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, requested_starts_at, change_reason, reference_photo_id, reference_path, agreed_price, proposed_price, price_reason, services(name, price), customers(first_name, last_name, avatar_path)',
       )
       .eq('professional_id', user.id)
       .order('starts_at', { ascending: true });
@@ -159,11 +161,11 @@ export default function ProfessionalBookings() {
     loadBookings();
   }
 
-  function priceChanges(booking: Booking, price: number | null) {
+  function priceChanges(booking: Booking, price: number | null, reason: string | null) {
     const usual = Number(booking.services?.price ?? 0);
-    if (price === null || price === usual) return { status: 'confirmed', agreed_price: null };
-    if (price < usual) return { status: 'confirmed', agreed_price: price };
-    return { proposed_price: price };
+    if (price === null || price === usual) return { status: 'confirmed', agreed_price: null, price_reason: null };
+    if (price < usual) return { status: 'confirmed', agreed_price: price, price_reason: reason };
+    return { proposed_price: price, price_reason: reason };
   }
 
   async function confirmHomeVisit(travelMinutes: number) {
@@ -171,7 +173,7 @@ export default function ProfessionalBookings() {
 
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({ ...priceChanges(homeVisit, chosenPrice), travel_minutes: travelMinutes })
+      .update({ ...priceChanges(homeVisit, chosenPrice, chosenReason), travel_minutes: travelMinutes })
       .eq('id', homeVisit.id);
 
     if (updateError) {
@@ -185,15 +187,17 @@ export default function ProfessionalBookings() {
 
     setHomeVisit(null);
     setChosenPrice(null);
+    setChosenReason(null);
     loadBookings();
   }
 
-  async function confirmWithPrice(price: number) {
+  async function confirmWithPrice(price: number, reason: string | null) {
     if (!pricing) return;
     const booking = pricing;
 
     if (booking.location_type === 'at_customer') {
       setChosenPrice(price);
+      setChosenReason(reason);
       setPricing(null);
       setHomeVisit(booking);
       return;
@@ -201,7 +205,7 @@ export default function ProfessionalBookings() {
 
     const { error: updateError } = await supabase
       .from('bookings')
-      .update(priceChanges(booking, price))
+      .update(priceChanges(booking, price, reason))
       .eq('id', booking.id);
 
     if (updateError) throw new Error("Couldn't confirm it. Check your connection and try again.");
@@ -457,7 +461,8 @@ export default function ProfessionalBookings() {
                   <Text style={styles.requestTime}>
                     You asked for {formatPrice(item.proposed_price)} (usually {formatPrice(usualPrice)})
                   </Text>
-                  <Text style={styles.requestReason}>Waiting for {customerName} to reply.</Text>
+                  {item.price_reason ? <Text style={styles.requestReason}>Reason: {item.price_reason}</Text> : null}
+                  <Text style={styles.waitingReason}>Waiting for {customerName} to reply.</Text>
                 </View>
               )}
 
@@ -488,6 +493,9 @@ export default function ProfessionalBookings() {
                   <Text style={styles.priceNote}>incl. {formatPrice(item.call_out_fee)} call-out</Text>
                 )}
               </View>
+              {item.agreed_price !== null && item.price_reason ? (
+                <Text style={styles.priceReason}>{item.price_reason}</Text>
+              ) : null}
 
               {busy && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
 
@@ -571,6 +579,7 @@ export default function ProfessionalBookings() {
           onCancel={() => {
             setHomeVisit(null);
             setChosenPrice(null);
+            setChosenReason(null);
           }}
           onConfirm={confirmHomeVisit}
         />
@@ -649,6 +658,7 @@ const useStyles = makeStyles((colors) => ({
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md },
   price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   priceNote: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
+  priceReason: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: 2 },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   actionButton: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center', borderWidth: 1.5 },
   primary: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },

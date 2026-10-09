@@ -19,7 +19,7 @@ type Props = {
   customerName: string;
   usualPrice: number;
   onCancel: () => void;
-  onConfirm: (price: number) => Promise<void>;
+  onConfirm: (price: number, reason: string | null) => Promise<void>;
 };
 
 export function PriceSheet({ visible, customerName, usualPrice, onCancel, onConfirm }: Props) {
@@ -27,12 +27,14 @@ export function PriceSheet({ visible, customerName, usualPrice, onCancel, onConf
   const styles = useStyles();
   const { colors } = useTheme();
   const [price, setPrice] = useState(String(usualPrice));
+  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       setPrice(String(usualPrice));
+      setReason('');
       setError(null);
     }
   }, [visible, usualPrice]);
@@ -40,10 +42,15 @@ export function PriceSheet({ visible, customerName, usualPrice, onCancel, onConf
   const value = Number(price.replace(',', '.'));
   const valid = price.trim() !== '' && !isNaN(value) && value >= 0;
   const higher = valid && value > usualPrice;
+  const changed = valid && value !== usualPrice;
 
   async function handleConfirm() {
     if (!valid) {
       setError('Use numbers only, like 450.');
+      return;
+    }
+    if (changed && !reason.trim()) {
+      setError(`Let ${customerName} know why the price is different.`);
       return;
     }
 
@@ -51,7 +58,7 @@ export function PriceSheet({ visible, customerName, usualPrice, onCancel, onConf
     setError(null);
 
     try {
-      await onConfirm(value);
+      await onConfirm(value, changed ? reason.trim() : null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save. Try again.");
     } finally {
@@ -77,6 +84,22 @@ export function PriceSheet({ visible, customerName, usualPrice, onCancel, onConf
             placeholderTextColor={colors.textFaint}
             selectTextOnFocus
           />
+
+          {changed && (
+            <>
+              <Text style={ui.label}>Reason</Text>
+              <TextInput
+                style={[ui.input, styles.reasonInput]}
+                value={reason}
+                onChangeText={setReason}
+                placeholder="e.g. Waist length takes about 2 more hours"
+                placeholderTextColor={colors.textFaint}
+                multiline
+                maxLength={200}
+                textAlignVertical="top"
+              />
+            </>
+          )}
 
           {higher && (
             <Text style={styles.note}>
@@ -124,6 +147,7 @@ const useStyles = makeStyles((colors) => ({
   },
   title: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   usual: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 4 },
+  reasonInput: { minHeight: 72, paddingTop: 12 },
   note: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.md },
   buttons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xl },
   cancel: { flex: 1, borderRadius: 10, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.accentSoft },
