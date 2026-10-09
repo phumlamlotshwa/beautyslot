@@ -40,8 +40,7 @@ type Hours = {
 };
 
 const MINUTE = 60 * 1000;
-const MAX_REASON = 300;
-const quickReasons = ['Fully booked that day', 'Running late', 'Not feeling well', 'Something came up'];
+const quickReasons = ['Fully booked', 'Not feeling well', 'Something came up'];
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -207,7 +206,7 @@ export default function SuggestNewTime() {
     if (!booking || !selectedSlot) return;
 
     if (reason.trim() === '') {
-      setError('Add a reason so they know why.');
+      setError('Let them know why you need to move it.');
       return;
     }
 
@@ -228,7 +227,6 @@ export default function SuggestNewTime() {
         status: 'reschedule_proposed',
         previous_starts_at: originalTime,
         change_reason: reason.trim(),
-        // Your suggestion replaces any time the customer asked for
         requested_starts_at: null,
         requested_ends_at: null,
       })
@@ -244,18 +242,14 @@ export default function SuggestNewTime() {
         setSlots([]);
         setRefreshKey((k) => k + 1);
       } else {
-        setError("The new time didn't send. Check your connection and try again.");
+        setError("Couldn't send that. Check your connection and try again.");
       }
       return;
     }
 
-    const name = booking.customers?.first_name ?? 'Your customer';
+    const name = booking.customers?.first_name ?? 'They';
 
-    Alert.alert(
-      'New time sent',
-      `${name} can accept or decline ${formatDay(selectedSlot)} at ${formatTime(selectedSlot)}. You'll see their answer under Bookings.`,
-      [{ text: 'Done', onPress: () => router.back() }],
-    );
+    Alert.alert('Sent', `${name} can accept or decline it.`, [{ text: 'OK', onPress: () => router.back() }]);
   }
 
   if (loading) {
@@ -305,8 +299,8 @@ export default function SuggestNewTime() {
           <View style={styles.notice}>
             <Ionicons name="time-outline" size={16} color={colors.text} />
             <Text style={styles.noticeText}>
-              {customerName} asked for {formatDay(theyAsked)} at {formatTime(theyAsked)}. Sending a different time
-              replaces their request.
+              {customerName} asked for {formatDay(theyAsked)} at {formatTime(theyAsked)}. A new time from you will
+              replace it.
             </Text>
           </View>
         )}
@@ -350,7 +344,7 @@ export default function SuggestNewTime() {
 
         {selectedSlot && (
           <>
-            <Text style={ui.sectionTitle}>Why are you moving it?</Text>
+            <Text style={ui.sectionTitle}>Reason</Text>
             <View style={styles.reasonChips}>
               {quickReasons.map((r) => {
                 const isSelected = reason === r;
@@ -365,28 +359,24 @@ export default function SuggestNewTime() {
               style={[ui.input, styles.reasonInput]}
               value={reason}
               onChangeText={setReason}
-              placeholder="Or write your own"
+              placeholder="Or type it here"
               placeholderTextColor={colors.textFaint}
               multiline
-              maxLength={MAX_REASON}
+              maxLength={300}
               textAlignVertical="top"
             />
-            <Text style={styles.counter}>
-              {reason.length}/{MAX_REASON}
-            </Text>
 
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Moving from</Text>
               <Text style={styles.oldTime}>
                 {formatDay(currentTime)} at {formatTime(currentTime)}
               </Text>
-              <Text style={[styles.summaryLabel, { marginTop: spacing.md }]}>To</Text>
-              <Text style={styles.newTime}>
-                {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
-              </Text>
-              <Text style={styles.summaryHelp}>
-                The booking moves to this time now. If {customerName} declines, the booking is cancelled.
-              </Text>
+              <View style={styles.newTimeRow}>
+                <Ionicons name="arrow-forward" size={18} color={colors.text} />
+                <Text style={styles.newTime}>
+                  {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
+                </Text>
+              </View>
+              <Text style={styles.summaryHelp}>If {customerName} says no, the booking is cancelled.</Text>
               {error && <Text style={ui.error}>{error}</Text>}
               <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleSend} disabled={saving}>
                 {saving ? (
@@ -419,7 +409,6 @@ const useStyles = makeStyles((colors) => ({
   noticeText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text },
   reasonChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   reasonInput: { minHeight: 90, paddingTop: 12 },
-  counter: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint, textAlign: 'right', marginTop: 4 },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   slotChip: {
     width: '31%',
@@ -432,21 +421,9 @@ const useStyles = makeStyles((colors) => ({
   slotText: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.text },
   slotTextSelected: { color: colors.onAccent },
   summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: 28 },
-  summaryLabel: {
-    fontFamily: fonts.semiBold,
-    fontSize: 12,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    color: colors.textFaint,
-  },
-  oldTime: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.textMuted,
-    textDecorationLine: 'line-through',
-    marginTop: 2,
-  },
-  newTime: { fontFamily: fonts.extraBold, fontSize: 20, color: colors.text, marginTop: 2 },
+  oldTime: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textDecorationLine: 'line-through' },
+  newTimeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
+  newTime: { flex: 1, fontFamily: fonts.extraBold, fontSize: 20, color: colors.text },
   summaryHelp: {
     fontFamily: fonts.regular,
     fontSize: 13,
