@@ -1,22 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Toggle } from '../../components/toggle';
 import { AddressInput } from '../../components/address-input';
-import { formatPrice } from '../../lib/format';
 import { Place } from '../../lib/maps';
 import { supabase } from '../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../lib/theme';
-import { ui } from '../../lib/ui';
+import { fonts, radius, spacing } from '../../lib/theme';
+import { makeStyles, useTheme } from '../../lib/theme-context';
+import { useUi } from '../../lib/ui';
 
 function toNumber(text: string) {
   return Number(text.replace(',', '.'));
 }
 
-const PREVIEW_DISTANCES = [5, 15, 30];
-
-export default function HomeVisits() {
+export default function HouseCalls() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [base, setBase] = useState<Place | null>(null);
   const [savedArea, setSavedArea] = useState('');
   const [baseFee, setBaseFee] = useState('');
@@ -79,32 +80,30 @@ export default function HomeVisits() {
   const included = chargeByDistance ? toNumber(includedKm || '0') : 0;
   const rate = chargeByDistance ? toNumber(perKm) : 0;
   const max = maxKm.trim() === '' ? null : toNumber(maxKm);
-  const pricingValid =
-    baseFee !== '' && !isNaN(fee) && (!chargeByDistance || (perKm !== '' && !isNaN(rate) && !isNaN(included)));
 
   async function handleSave() {
     setError(null);
 
     if (!base) {
-      setError('Please search for your address and choose it from the list.');
+      setError('Search for your address and pick it from the list.');
       return;
     }
     if (baseFee === '' || isNaN(fee) || fee < 0) {
-      setError('Please enter your call-out fee. Use 0 if you don\u2019t charge one.');
+      setError('Add your call-out fee. Put 0 if you don\u2019t charge one.');
       return;
     }
     if (chargeByDistance) {
       if (perKm === '' || isNaN(rate) || rate <= 0) {
-        setError('Please enter your charge per extra km, or switch off charging extra for distance.');
+        setError('Add what you charge per extra km, or switch off charging extra for distance.');
         return;
       }
       if (isNaN(included) || included < 0) {
-        setError('Please enter how many km your call-out fee covers, or leave it empty for none.');
+        setError('Add how many km your call-out fee covers, or leave it empty for none.');
         return;
       }
     }
     if (max !== null && (isNaN(max) || max <= 0)) {
-      setError('Please enter a maximum distance above 0, or leave it empty for no limit.');
+      setError('Set a maximum distance above 0, or leave it empty for no limit.');
       return;
     }
 
@@ -113,7 +112,7 @@ export default function HomeVisits() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      setError('You need to be logged in to save.');
+      setError('Log in again to save.');
       setSaving(false);
       return;
     }
@@ -170,14 +169,14 @@ export default function HomeVisits() {
       <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
-            <Ionicons name="location-outline" size={20} color={colors.accentDark} />
+            <Ionicons name="location-outline" size={20} color={colors.text} />
             <Text style={styles.cardTitle}>Where you work from</Text>
           </View>
           <Text style={styles.cardHelp}>Your full address is private. Customers only see your area.</Text>
           <AddressInput value={base} onChange={setBase} />
           {area ? (
             <View style={styles.areaRow}>
-              <Ionicons name="eye-outline" size={15} color={colors.accentDark} />
+              <Ionicons name="eye-outline" size={15} color={colors.text} />
               <Text style={styles.areaText}>Customers will see: {area}</Text>
             </View>
           ) : null}
@@ -185,7 +184,7 @@ export default function HomeVisits() {
 
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
-            <Ionicons name="car-outline" size={20} color={colors.accentDark} />
+            <Ionicons name="car-outline" size={20} color={colors.text} />
             <Text style={styles.cardTitle}>House call pricing</Text>
           </View>
 
@@ -232,21 +231,6 @@ export default function HomeVisits() {
           />
           <Text style={styles.fieldHelp}>Optional. Customers further away can't book you for house calls.</Text>
 
-          {pricingValid && (
-            <View style={styles.preview}>
-              <Text style={styles.previewTitle}>With your prices</Text>
-              {PREVIEW_DISTANCES.map((km) => {
-                const outOfRange = max !== null && !isNaN(max) && km > max;
-                const total = fee + rate * Math.max(0, km - included);
-                return (
-                  <Text key={km} style={styles.previewLine}>
-                    A customer {km} km away {outOfRange ? "can't book a house call" : `would pay ${formatPrice(total)}`}
-                  </Text>
-                );
-              })}
-            </View>
-          )}
-
           <Text style={styles.note}>
             Distances are measured in a straight line from where you work, which is usually a little shorter than the drive.
           </Text>
@@ -262,20 +246,25 @@ export default function HomeVisits() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
+const useStyles = makeStyles((colors) => ({
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   cardTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
-  cardHelp: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginBottom: spacing.md },
+  cardHelp: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginBottom: spacing.md },
   areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
-  areaText: { fontFamily: fonts.medium, fontSize: 14, color: colors.accentDark },
+  areaText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
   row: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-  fieldLabel: { fontFamily: fonts.medium, fontSize: 13, color: colors.text, marginTop: spacing.md, marginBottom: 6 },
-  fieldHelp: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
-  switchLabel: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
-  preview: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.lg },
-  previewTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.accentDark, marginBottom: 4 },
-  previewLine: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, marginTop: 2 },
-  note: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: spacing.md },
-});
+  fieldLabel: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.text, marginTop: spacing.md, marginBottom: 6 },
+  fieldHelp: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: 4 },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  switchLabel: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
+  note: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.md },
+}));
