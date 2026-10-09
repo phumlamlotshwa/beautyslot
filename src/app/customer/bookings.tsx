@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, SectionList, Text, View } from 'react-native';
 import { formatPrice } from '../../lib/format';
@@ -9,6 +9,7 @@ import { fonts, radius, spacing } from '../../lib/theme';
 import { makeStyles, useTheme } from '../../lib/theme-context';
 import { useUi } from '../../lib/ui';
 import { Avatar } from '../../components/avatar';
+import { CountBadge } from '../../components/count-badge';
 import { professionalPhotoUrl } from '../../lib/photos';
 import { shortAddress } from '../../lib/location';
 
@@ -16,6 +17,8 @@ type Booking = {
   id: number;
   starts_at: string;
   previous_starts_at: string | null;
+  requested_starts_at: string | null;
+  change_reason: string | null;
   status: BookingStatus;
   location_type: 'at_professional' | 'at_customer';
   address: string | null;
@@ -60,10 +63,11 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
+  // Every section starts closed. Tap a heading to open it.
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
   function toggleSection(title: string) {
-    setClosed((current) => {
+    setOpenSections((current) => {
       const next = new Set(current);
       if (next.has(title)) {
         next.delete(title);
@@ -87,7 +91,7 @@ export default function MyBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, previous_starts_at, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)'
+        'id, starts_at, previous_starts_at, requested_starts_at, change_reason, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)'
       )
       .eq('customer_id', user.id)
       .order('starts_at', { ascending: true });
@@ -156,6 +160,10 @@ export default function MyBookings() {
     );
   }
 
+  function openChangeTime(booking: Booking) {
+    router.push({ pathname: '/customer/change/[bookingId]', params: { bookingId: String(booking.id) } });
+  }
+
   function handleCancel(booking: Booking) {
     Alert.alert(
       'Cancel booking',
@@ -186,27 +194,40 @@ export default function MyBookings() {
   const now = Date.now();
   const isFuture = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
-  const confirmed = bookings.filter((b) => b.status === 'confirmed' && isFuture(b));
-  const pending = bookings.filter(
-    (b) => (b.status === 'pending' || b.status === 'reschedule_proposed') && isFuture(b)
-  );
+  // You asked to move this booking and are waiting for an answer
+  const isMyRequest = (b: Booking) =>
+    isFuture(b) && (b.status === 'pending' || b.status === 'confirmed') && !!b.requested_starts_at;
+  // The professional suggested a new time and is waiting for your answer
+  const isTheirSuggestion = (b: Booking) => b.status === 'reschedule_proposed' && isFuture(b);
+
+  const reschedules = bookings.filter((b) => isTheirSuggestion(b) || isMyRequest(b));
+  const confirmed = bookings.filter((b) => b.status === 'confirmed' && isFuture(b) && !isMyRequest(b));
+  const pending = bookings.filter((b) => b.status === 'pending' && isFuture(b) && !isMyRequest(b));
   const cancelled = bookings.filter((b) => b.status === 'cancelled').reverse();
   const history = bookings
-    .filter((b) => b.status !== 'cancelled' && !confirmed.includes(b) && !pending.includes(b))
+    .filter(
+      (b) =>
+        b.status !== 'cancelled' &&
+        !reschedules.includes(b) &&
+        !confirmed.includes(b) &&
+        !pending.includes(b)
+    )
     .reverse();
 
   const sections = [
-    { title: 'Confirmed', items: confirmed },
-    { title: 'Pending', items: pending },
-    { title: 'Cancelled', items: cancelled },
-    { title: 'History', items: history },
+    { title: 'Reschedules', items: reschedules, needsAction: reschedules.filter(isTheirSuggestion).length },
+    { title: 'Confirmed', items: confirmed, needsAction: 0 },
+    { title: 'Pending', items: pending, needsAction: 0 },
+    { title: 'Cancelled', items: cancelled, needsAction: 0 },
+    { title: 'History', items: history, needsAction: 0 },
   ]
     .filter((s) => s.items.length > 0)
     .map((s) => ({
       title: s.title,
       count: s.items.length,
-      isOpen: !closed.has(s.title),
-      data: closed.has(s.title) ? [] : s.items,
+      needsAction: s.needsAction,
+      isOpen: openSections.has(s.title),
+      data: openSections.has(s.title) ? s.items : [],
     }));
 
   if (loading) {
@@ -234,9 +255,12 @@ export default function MyBookings() {
         }
         renderSectionHeader={({ section }) => (
           <Pressable style={styles.sectionHeader} onPress={() => toggleSection(section.title)}>
-            <Text style={styles.sectionTitle}>
-              {section.title} <Text style={styles.sectionCount}>({section.count})</Text>
-            </Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>
+                {section.title} <Text style={styles.sectionCount}>({section.count})</Text>
+              </Text>
+              <CountBadge count={section.needsAction} />
+            </View>
             <Ionicons name={section.isOpen ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
           </Pressable>
         )}
@@ -252,13 +276,18 @@ export default function MyBookings() {
           const proAddress = proAddresses[item.id];
           const faded = item.status === 'cancelled' || !future;
           const stylist = stylistName(item);
+          const hasRequest = canCancel && !!item.requested_starts_at;
+          const proFirstName = item.professionals?.first_name ?? 'them';
+          const badge = hasRequest
+            ? { label: 'Change requested', color: colors.info, background: colors.infoSoft }
+            : status;
 
           return (
             <View style={[styles.card, isProposal && styles.proposalCard, faded && styles.fadedCard]}>
               <View style={styles.cardTop}>
                 <Text style={styles.serviceName}>{item.services?.name ?? 'Service'}</Text>
-                <View style={[styles.badge, { backgroundColor: status.background }]}>
-                  <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
+                <View style={[styles.badge, { backgroundColor: badge.background }]}>
+                  <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
                 </View>
               </View>
 
@@ -290,6 +319,11 @@ export default function MyBookings() {
                     <Ionicons name="arrow-forward" size={15} color={colors.info} />
                     <Text style={styles.newTime}>{formatBookingTime(item.starts_at)}</Text>
                   </View>
+                  {item.change_reason ? (
+                    <Text style={styles.reasonText}>
+                      {proFirstName}’s reason: “{item.change_reason}”
+                    </Text>
+                  ) : null}
                 </>
               ) : (
                 <View style={styles.line}>
@@ -303,6 +337,17 @@ export default function MyBookings() {
                   <Ionicons name="home-outline" size={15} color={colors.textMuted} />
                   <Text style={styles.lineText}>
                     {item.address ? `House call at ${shortAddress(item.address)}` : 'House call'}
+                  </Text>
+                </View>
+              )}
+
+              {hasRequest && item.requested_starts_at && (
+                <View style={styles.requestBox}>
+                  <Text style={styles.requestLabel}>You asked to move it to</Text>
+                  <Text style={styles.requestTime}>{formatBookingTime(item.requested_starts_at)}</Text>
+                  {item.change_reason ? <Text style={styles.requestReason}>“{item.change_reason}”</Text> : null}
+                  <Text style={styles.requestNote}>
+                    Waiting for {proFirstName} to answer. Until then, your booking stays at the time above.
                   </Text>
                 </View>
               )}
@@ -347,9 +392,15 @@ export default function MyBookings() {
               )}
 
               {!answering && canCancel && (
-                <Pressable style={styles.cancelLink} onPress={() => handleCancel(item)}>
-                  <Text style={styles.cancelText}>Cancel booking</Text>
-                </Pressable>
+                <View style={styles.linkRow}>
+                  <Pressable style={styles.changeButton} onPress={() => openChangeTime(item)}>
+                    <Ionicons name="time-outline" size={16} color={colors.text} />
+                    <Text style={styles.changeText}>{hasRequest ? 'Ask for another time' : 'Change time'}</Text>
+                  </Pressable>
+                  <Pressable style={styles.cancelLink} onPress={() => handleCancel(item)}>
+                    <Text style={styles.cancelText}>Cancel booking</Text>
+                  </Pressable>
+                </View>
               )}
             </View>
           );
@@ -369,6 +420,7 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
     marginBottom: spacing.md,
   },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
   emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
@@ -386,6 +438,12 @@ const useStyles = makeStyles((colors) => ({
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
   oldTime: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textFaint, textDecorationLine: 'line-through' },
   newTime: { flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.info },
+  reasonText: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.sm },
+  requestBox: { backgroundColor: colors.infoSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  requestLabel: { fontFamily: fonts.semiBold, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.info },
+  requestTime: { fontFamily: fonts.bold, fontSize: 15, color: colors.text, marginTop: 4 },
+  requestReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.sm },
+  requestNote: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.sm },
   addressBox: { backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
   addressLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
   addressText: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
@@ -411,6 +469,18 @@ const useStyles = makeStyles((colors) => ({
   primaryText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.onAccent },
   danger: { borderColor: colors.danger, backgroundColor: colors.surface },
   dangerText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.danger },
-  cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.md },
+  changeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: colors.accentDark,
+    borderRadius: radius.pill,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  changeText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
+  cancelLink: { paddingVertical: 4 },
   cancelText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.danger },
 }));

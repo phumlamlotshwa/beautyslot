@@ -25,6 +25,8 @@ type Booking = {
   address_lng: number | null;
   call_out_fee: number;
   travel_minutes: number;
+  requested_starts_at: string | null;
+  change_reason: string | null;
   services: { name: string; price: number } | null;
   customers: { first_name: string; last_name: string; avatar_path: string | null } | null;
 };
@@ -48,11 +50,12 @@ export default function ProfessionalBookings() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [homeVisit, setHomeVisit] = useState<Booking | null>(null);
-  const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
+  // Every section starts closed. Tap a heading to open it.
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   function toggleSection(title: string) {
-    setClosed((current) => {
+    setOpenSections((current) => {
       const next = new Set(current);
       if (next.has(title)) {
         next.delete(title);
@@ -76,7 +79,7 @@ export default function ProfessionalBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, services(name, price), customers(first_name, last_name, avatar_path)'
+        'id, staff_id, staff(name), starts_at, status, location_type, address, address_lat, address_lng, call_out_fee, travel_minutes, requested_starts_at, change_reason, services(name, price), customers(first_name, last_name, avatar_path)'
       )
       .eq('professional_id', user.id)
       .order('starts_at', { ascending: true });
@@ -144,6 +147,45 @@ export default function ProfessionalBookings() {
     }
   }
 
+  async function answerChange(booking: Booking, accept: boolean) {
+    setError(null);
+    setUpdatingId(booking.id);
+
+    const { error: answerError } = await supabase.rpc('respond_to_change_request', {
+      p_booking_id: booking.id,
+      p_accept: accept,
+    });
+
+    setUpdatingId(null);
+
+    if (answerError) {
+      if (answerError.code === '23P01') {
+        setError(
+          `Someone else has booked ${booking.customers?.first_name ?? 'the customer'}'s new time, so the booking stays as it was. Decline it, or suggest another time.`
+        );
+      } else if (answerError.code === 'P0001') {
+        setError(answerError.message);
+      } else {
+        setError("That didn't go through. Check your connection and try again.");
+      }
+      loadBookings();
+      return;
+    }
+
+    loadBookings();
+  }
+
+  function declineChange(booking: Booking) {
+    Alert.alert(
+      'Keep the original time?',
+      `${booking.customers?.first_name ?? 'The customer'}'s booking stays on ${formatBookingTime(booking.starts_at)}.`,
+      [
+        { text: 'Go back', style: 'cancel' },
+        { text: 'Keep original', style: 'destructive', onPress: () => answerChange(booking, false) },
+      ]
+    );
+  }
+
   function confirmCancel(booking: Booking, title: string) {
     Alert.alert(
       title,
@@ -158,44 +200,53 @@ export default function ProfessionalBookings() {
   const now = Date.now();
   const isFuture = (b: Booking) => new Date(b.starts_at).getTime() >= now;
 
+  // A customer has asked to move this booking and is waiting for an answer
+  const hasChangeRequest = (b: Booking) =>
+    isFuture(b) && (b.status === 'pending' || b.status === 'confirmed') && !!b.requested_starts_at;
+
+  // Needs an answer: a new booking, or a customer asking to change the time
+  const needsAnswer = (b: Booking) => (b.status === 'pending' && isFuture(b)) || hasChangeRequest(b);
+
   const team = [...new Map(bookings.filter((b) => b.staff).map((b) => [b.staff_id, b.staff!.name])).entries()]
     .map(([id, name]) => ({ id, name }));
 
-  // New requests waiting to be confirmed, for everyone or for one stylist
+  // Bookings waiting for an answer, for everyone or for one stylist
   const newCount = (staffId: number | 'all') =>
-    bookings.filter(
-      (b) => b.status === 'pending' && isFuture(b) && (staffId === 'all' || b.staff_id === staffId)
-    ).length;
+    bookings.filter((b) => needsAnswer(b) && (staffId === 'all' || b.staff_id === staffId)).length;
 
   const visible = staffFilter === 'all' ? bookings : bookings.filter((b) => b.staff_id === staffFilter);
 
-  const newRequests = visible.filter((b) => b.status === 'pending' && isFuture(b));
-  const confirmed = visible.filter((b) => b.status === 'confirmed' && isFuture(b));
-  const waiting = visible.filter((b) => b.status === 'reschedule_proposed' && isFuture(b));
+  const newRequests = visible.filter((b) => b.status === 'pending' && isFuture(b) && !hasChangeRequest(b));
+  // Customers asking to move a booking, and new times you've suggested
+  const reschedules = visible.filter(
+    (b) => hasChangeRequest(b) || (b.status === 'reschedule_proposed' && isFuture(b))
+  );
+  const confirmed = visible.filter((b) => b.status === 'confirmed' && isFuture(b) && !hasChangeRequest(b));
   const cancelled = visible.filter((b) => b.status === 'cancelled').reverse();
   const history = visible
     .filter(
       (b) =>
         b.status !== 'cancelled' &&
         !newRequests.includes(b) &&
-        !confirmed.includes(b) &&
-        !waiting.includes(b)
+        !reschedules.includes(b) &&
+        !confirmed.includes(b)
     )
     .reverse();
 
   const sections = [
-    { title: 'New', items: newRequests },
-    { title: 'Confirmed', items: confirmed },
-    { title: 'Pending', items: waiting },
-    { title: 'Cancelled', items: cancelled },
-    { title: 'History', items: history },
+    { title: 'New', items: newRequests, needsAction: newRequests.length },
+    { title: 'Reschedules', items: reschedules, needsAction: reschedules.filter(hasChangeRequest).length },
+    { title: 'Confirmed', items: confirmed, needsAction: 0 },
+    { title: 'Cancelled', items: cancelled, needsAction: 0 },
+    { title: 'History', items: history, needsAction: 0 },
   ]
     .filter((s) => s.items.length > 0)
     .map((s) => ({
       title: s.title,
       count: s.items.length,
-      isOpen: !closed.has(s.title),
-      data: closed.has(s.title) ? [] : s.items,
+      needsAction: s.needsAction,
+      isOpen: openSections.has(s.title),
+      data: openSections.has(s.title) ? s.items : [],
     }));
 
   if (loading) {
@@ -248,9 +299,12 @@ export default function ProfessionalBookings() {
         }
         renderSectionHeader={({ section }) => (
           <Pressable style={styles.sectionHeader} onPress={() => toggleSection(section.title)}>
-            <Text style={styles.sectionTitle}>
-              {section.title} <Text style={styles.sectionCount}>({section.count})</Text>
-            </Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>
+                {section.title} <Text style={styles.sectionCount}>({section.count})</Text>
+              </Text>
+              <CountBadge count={section.needsAction} />
+            </View>
             <Ionicons name={section.isOpen ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
           </Pressable>
         )}
@@ -260,7 +314,12 @@ export default function ProfessionalBookings() {
           const busy = updatingId === item.id;
           const isHome = item.location_type === 'at_customer';
           const total = Number(item.services?.price ?? 0) + Number(item.call_out_fee);
-          const isNew = item.status === 'pending' && future;
+          const changeRequested = hasChangeRequest(item);
+          const isNew = item.status === 'pending' && future && !changeRequested;
+          const customerName = item.customers?.first_name ?? 'The customer';
+          const badge = changeRequested
+            ? { label: 'Change requested', color: colors.info, background: colors.infoSoft }
+            : status;
           const canMove = future && (item.status === 'pending' || item.status === 'confirmed' || item.status === 'reschedule_proposed');
           const canCancel = future && (item.status === 'confirmed' || item.status === 'reschedule_proposed');
           const canComplete = !future && item.status === 'confirmed';
@@ -270,8 +329,8 @@ export default function ProfessionalBookings() {
             <View style={[styles.card, faded && styles.fadedCard]}>
               <View style={styles.cardTop}>
                 <Text style={styles.serviceName}>{item.services?.name ?? 'Service'}</Text>
-                <View style={[styles.badge, { backgroundColor: status.background }]}>
-                  <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
+                <View style={[styles.badge, { backgroundColor: badge.background }]}>
+                  <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
                 </View>
               </View>
 
@@ -309,8 +368,19 @@ export default function ProfessionalBookings() {
                 </View>
               )}
 
+              {changeRequested && item.requested_starts_at && (
+                <View style={styles.requestBox}>
+                  <Text style={styles.requestLabel}>{customerName} asked to move it to</Text>
+                  <Text style={styles.requestTime}>{formatBookingTime(item.requested_starts_at)}</Text>
+                  {item.change_reason ? <Text style={styles.requestReason}>“{item.change_reason}”</Text> : null}
+                </View>
+              )}
+
               {item.status === 'reschedule_proposed' && future && (
-                <Text style={styles.waitingText}>Waiting for the customer to accept this new time.</Text>
+                <View style={styles.waitingBox}>
+                  <Text style={styles.waitingText}>Waiting for {customerName} to accept this new time.</Text>
+                  {item.change_reason ? <Text style={styles.waitingReason}>Your reason: “{item.change_reason}”</Text> : null}
+                </View>
               )}
 
               <View style={styles.priceRow}>
@@ -321,6 +391,17 @@ export default function ProfessionalBookings() {
               </View>
 
               {busy && <ActivityIndicator style={{ marginTop: spacing.md }} color={colors.accentDark} />}
+
+              {!busy && changeRequested && (
+                <View style={styles.actions}>
+                  <Pressable style={[styles.actionButton, styles.primary]} onPress={() => answerChange(item, true)}>
+                    <Text style={styles.primaryText}>Accept new time</Text>
+                  </Pressable>
+                  <Pressable style={[styles.actionButton, styles.danger]} onPress={() => declineChange(item)}>
+                    <Text style={styles.dangerText}>Decline</Text>
+                  </Pressable>
+                </View>
+              )}
 
               {!busy && isNew && (
                 <View style={styles.actions}>
@@ -338,7 +419,7 @@ export default function ProfessionalBookings() {
                   <Pressable style={styles.moveButton}>
                     <Ionicons name="time-outline" size={16} color={colors.text} />
                     <Text style={styles.moveText}>
-                      {item.status === 'reschedule_proposed' ? 'Suggest a different time' : 'Suggest a new time'}
+                      {item.status === 'reschedule_proposed' || changeRequested ? 'Suggest a different time' : 'Suggest a new time'}
                     </Text>
                   </Pressable>
                 </Link>
@@ -386,6 +467,7 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
     marginBottom: spacing.md,
   },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
   emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
@@ -405,7 +487,13 @@ const useStyles = makeStyles((colors) => ({
   homeTitle: { fontFamily: fonts.bold, fontSize: 13, color: colors.text },
   homeAddress: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 4 },
   homeDetail: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4 },
-  waitingText: { fontFamily: fonts.medium, fontSize: 14, color: colors.info, marginTop: spacing.md },
+  requestBox: { backgroundColor: colors.infoSoft, borderRadius: radius.sm, padding: spacing.md, marginTop: spacing.md },
+  requestLabel: { fontFamily: fonts.semiBold, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.info },
+  requestTime: { fontFamily: fonts.bold, fontSize: 15, color: colors.text, marginTop: 4 },
+  requestReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.sm },
+  waitingBox: { marginTop: spacing.md },
+  waitingText: { fontFamily: fonts.medium, fontSize: 14, color: colors.info },
+  waitingReason: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginTop: 4 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md },
   price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   priceNote: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
