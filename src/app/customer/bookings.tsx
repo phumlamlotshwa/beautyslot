@@ -20,6 +20,7 @@ type Booking = {
   call_out_fee: number;
   services: { name: string; price: number } | null;
   professionals: { first_name: string; last_name: string; avatar_path: string | null } | null;
+  staff: { name: string } | null;
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -29,6 +30,19 @@ function formatBookingTime(iso: string) {
   const d = new Date(iso);
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   return `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()} at ${time}`;
+}
+
+// A solo professional's one team member usually has their own name,
+// so only show "With ..." when the stylist is someone else.
+function stylistName(booking: Booking) {
+  const staffName = booking.staff?.name?.trim();
+  if (!staffName) return null;
+
+  const first = booking.professionals?.first_name?.trim() ?? '';
+  const full = `${first} ${booking.professionals?.last_name?.trim() ?? ''}`.trim();
+  const same = [first, full].some((n) => n.toLowerCase() === staffName.toLowerCase());
+
+  return same ? null : staffName;
 }
 
 function openDirections(address: string) {
@@ -41,7 +55,7 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-    const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
+  const [closed, setClosed] = useState<Set<string>>(new Set(['Cancelled', 'History']));
 
   function toggleSection(title: string) {
     setClosed((current) => {
@@ -68,7 +82,7 @@ export default function MyBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, previous_starts_at, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path)'
+        'id, starts_at, previous_starts_at, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)'
       )
       .eq('customer_id', user.id)
       .order('starts_at', { ascending: true });
@@ -176,7 +190,7 @@ export default function MyBookings() {
     .filter((b) => b.status !== 'cancelled' && !confirmed.includes(b) && !pending.includes(b))
     .reverse();
 
-    const sections = [
+  const sections = [
     { title: 'Confirmed', items: confirmed },
     { title: 'Pending', items: pending },
     { title: 'Cancelled', items: cancelled },
@@ -189,6 +203,7 @@ export default function MyBookings() {
       isOpen: !closed.has(s.title),
       data: closed.has(s.title) ? [] : s.items,
     }));
+
   if (loading) {
     return (
       <View style={ui.centered}>
@@ -212,7 +227,7 @@ export default function MyBookings() {
             <Text style={styles.emptyText}>When you book a professional, it'll show up here.</Text>
           </View>
         }
-                renderSectionHeader={({ section }) => (
+        renderSectionHeader={({ section }) => (
           <Pressable style={styles.sectionHeader} onPress={() => toggleSection(section.title)}>
             <Text style={styles.sectionTitle}>
               {section.title} <Text style={styles.sectionCount}>({section.count})</Text>
@@ -231,6 +246,7 @@ export default function MyBookings() {
           const showProAddress = future && !isHome && item.status === 'confirmed';
           const proAddress = proAddresses[item.id];
           const faded = item.status === 'cancelled' || !future;
+          const stylist = stylistName(item);
 
           return (
             <View style={[styles.card, isProposal && styles.proposalCard, faded && styles.fadedCard]}>
@@ -251,6 +267,13 @@ export default function MyBookings() {
                   {item.professionals?.first_name} {item.professionals?.last_name}
                 </Text>
               </View>
+
+              {stylist && (
+                <View style={styles.line}>
+                  <Ionicons name="cut-outline" size={15} color={colors.textMuted} />
+                  <Text style={styles.lineText}>With {stylist}</Text>
+                </View>
+              )}
 
               {isProposal && item.previous_starts_at ? (
                 <>
@@ -330,7 +353,7 @@ export default function MyBookings() {
 }
 
 const styles = StyleSheet.create({
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.md },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   sectionCount: { fontFamily: fonts.regular, fontSize: 16, color: colors.textMuted },
   emptyBox: { alignItems: 'center', marginTop: 64, paddingHorizontal: spacing.xl },
@@ -363,5 +386,5 @@ const styles = StyleSheet.create({
   dangerText: { fontFamily: fonts.medium, fontSize: 15, color: colors.danger },
   cancelLink: { alignSelf: 'flex-start', marginTop: spacing.md, paddingVertical: 4 },
   cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.danger },
-    personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
 });
