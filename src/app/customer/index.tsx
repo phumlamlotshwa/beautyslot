@@ -11,6 +11,7 @@ import { colors, fonts, radius, spacing } from '../../lib/theme';
 import { ui } from '../../lib/ui';
 import { Avatar } from '../../components/avatar';
 import { customerPhotoUrls } from '../../lib/photos';
+import { professionalPhotoUrl } from '../../lib/photos';
 
 type Professional = {
   id: string;
@@ -20,6 +21,7 @@ type Professional = {
   location: string | null;
   approx_lat: number | null;
   approx_lng: number | null;
+  avatar_path: string | null;
 };
 
 const filters = [
@@ -61,7 +63,7 @@ export default function CustomerHome() {
 
         const { data, error: loadError } = await supabase
           .from('professionals')
-          .select('id, first_name, last_name, profession, location, approx_lat, approx_lng, services!inner(id)')
+          .select('id, first_name, last_name, profession, location, approx_lat, approx_lng, avatar_path, services!inner(id)')
           .order('first_name', { ascending: true });
 
         if (loadError) {
@@ -184,8 +186,8 @@ export default function CustomerHome() {
         renderItem={({ item }) => (
           <Link href={{ pathname: '/customer/professional/[id]', params: { id: item.id } }} asChild>
             <Pressable style={styles.card}>
-              <View style={ui.avatar}>
-                <Text style={ui.avatarText}>{item.first_name.charAt(0)}</Text>
+              <View style={{ marginRight: spacing.md }}>
+                <Avatar name={item.first_name} url={professionalPhotoUrl(item.avatar_path)} size={52} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>
