@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { MonthCalendar } from '../../../components/month-calendar';
 import { BusyTime, getOpenSlots } from '../../../lib/slots';
 import { supabase } from '../../../lib/supabase';
-import { colors, fonts, radius, spacing } from '../../../lib/theme';
-import { ui } from '../../../lib/ui';
+import { fonts, radius, spacing } from '../../../lib/theme';
+import { makeStyles, useTheme } from '../../../lib/theme-context';
+import { useUi } from '../../../lib/ui';
 
 type Booking = {
   id: number;
@@ -17,7 +18,7 @@ type Booking = {
   travel_minutes: number;
   services: { name: string; duration_minutes: number } | null;
   customers: { first_name: string } | null;
-    staff_id: number;
+  staff_id: number;
   staff: { name: string } | null;
 };
 
@@ -40,6 +41,9 @@ function formatDay(date: Date) {
 }
 
 export default function SuggestNewTime() {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
 
   const today = new Date();
@@ -70,7 +74,7 @@ export default function SuggestNewTime() {
         .single();
 
       if (loadError || !data) {
-        setError(loadError?.message ?? 'Booking not found.');
+        setError(loadError ? "We couldn't load this booking. Go back and try again." : 'This booking no longer exists.');
         setLoading(false);
         return;
       }
@@ -117,7 +121,7 @@ export default function SuggestNewTime() {
       if (cancelled) return;
 
       if (busyError) {
-        setError(busyError.message);
+        setError("We couldn't load the open times. Check your connection and try again.");
         setLoadingMonth(false);
         return;
       }
@@ -201,21 +205,23 @@ export default function SuggestNewTime() {
 
     if (saveError) {
       if (saveError.code === '23P01') {
-        setError('That time was just taken. Please choose another.');
+        setError('That time was just taken. Pick another one.');
         setSelectedDate(null);
         setSelectedSlot(null);
         setSlots([]);
         setRefreshKey((k) => k + 1);
       } else {
-        setError(saveError.message);
+        setError("The new time didn't send. Check your connection and try again.");
       }
       return;
     }
 
+    const name = booking.customers?.first_name ?? 'Your customer';
+
     Alert.alert(
       'New time sent',
-      `${booking.customers?.first_name ?? 'The customer'} will be asked to accept ${formatDay(selectedSlot)} at ${formatTime(selectedSlot)}.`,
-      [{ text: 'OK', onPress: () => router.back() }]
+      `${name} can accept or decline ${formatDay(selectedSlot)} at ${formatTime(selectedSlot)}. You'll see their answer under Bookings.`,
+      [{ text: 'Done', onPress: () => router.back() }]
     );
   }
 
@@ -236,6 +242,7 @@ export default function SuggestNewTime() {
   }
 
   const currentTime = new Date(booking.starts_at);
+  const customerName = booking.customers?.first_name ?? 'the customer';
 
   return (
     <ScrollView style={ui.screen} contentContainerStyle={ui.content}>
@@ -245,19 +252,21 @@ export default function SuggestNewTime() {
           <Ionicons name="person-outline" size={15} color={colors.textMuted} />
           <Text style={styles.lineText}>{booking.customers?.first_name}</Text>
         </View>
-        <View style={styles.line}>
-          <Ionicons name="cut-outline" size={15} color={colors.textMuted} />
-          <Text style={styles.lineText}>With {booking.staff?.name}</Text>
-        </View>
+        {booking.staff?.name ? (
+          <View style={styles.line}>
+            <Ionicons name="cut-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.lineText}>With {booking.staff.name}</Text>
+          </View>
+        ) : null}
         <View style={styles.line}>
           <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
           <Text style={styles.lineText}>
-            Currently {formatDay(currentTime)} at {formatTime(currentTime)}
+            Booked for {formatDay(currentTime)} at {formatTime(currentTime)}
           </Text>
         </View>
       </View>
 
-      <Text style={ui.sectionTitle}>Choose a new date</Text>
+      <Text style={ui.sectionTitle}>Pick a new day</Text>
       <MonthCalendar
         month={visibleMonth}
         minMonth={thisMonth}
@@ -272,7 +281,7 @@ export default function SuggestNewTime() {
         <>
           <Text style={ui.sectionTitle}>Times on {formatDay(selectedDate)}</Text>
           {slots.length === 0 ? (
-            <Text style={ui.muted}>No open times on this day.</Text>
+            <Text style={ui.muted}>This day is fully booked. Try another day.</Text>
           ) : (
             <View style={styles.slotGrid}>
               {slots.map((slot) => {
@@ -296,20 +305,16 @@ export default function SuggestNewTime() {
 
       {selectedSlot && (
         <View style={styles.summaryCard}>
-          <View style={styles.line}>
-            <Ionicons name="calendar-outline" size={15} color={colors.textFaint} />
-            <Text style={styles.oldTime}>
-              {formatDay(currentTime)} at {formatTime(currentTime)}
-            </Text>
-          </View>
-          <View style={styles.line}>
-            <Ionicons name="arrow-forward" size={15} color={colors.info} />
-            <Text style={styles.newTime}>
-              {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
-            </Text>
-          </View>
-          <Text style={ui.help}>
-            The booking moves to this time straight away. If the customer declines, it will be cancelled.
+          <Text style={styles.summaryLabel}>Moving from</Text>
+          <Text style={styles.oldTime}>
+            {formatDay(currentTime)} at {formatTime(currentTime)}
+          </Text>
+          <Text style={[styles.summaryLabel, { marginTop: spacing.md }]}>To</Text>
+          <Text style={styles.newTime}>
+            {formatDay(selectedSlot)} at {formatTime(selectedSlot)}
+          </Text>
+          <Text style={styles.summaryHelp}>
+            The booking moves to this time now. If {customerName} declines, the booking is cancelled.
           </Text>
           <Pressable style={[ui.button, saving && ui.buttonDisabled]} onPress={handleSend} disabled={saving}>
             {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={ui.buttonText}>Send new time</Text>}
@@ -320,17 +325,19 @@ export default function SuggestNewTime() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
+const useStyles = makeStyles((colors) => ({
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg },
   serviceName: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginBottom: spacing.xs },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  slotChip: { width: '31%', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
-  slotChipSelected: { backgroundColor: colors.accentDark, borderColor: colors.accentDark },
-  slotText: { fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  slotChip: { width: '31%', backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
+  slotChipSelected: { backgroundColor: colors.accentDark },
+  slotText: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.text },
   slotTextSelected: { color: colors.onAccent },
-  summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.info, padding: spacing.lg, marginTop: 28 },
-  oldTime: { flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.textFaint, textDecorationLine: 'line-through' },
-  newTime: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.info },
-});
+  summaryCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginTop: 28 },
+  summaryLabel: { fontFamily: fonts.semiBold, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.textFaint },
+  oldTime: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textDecorationLine: 'line-through', marginTop: 2 },
+  newTime: { fontFamily: fonts.extraBold, fontSize: 20, color: colors.text, marginTop: 2 },
+  summaryHelp: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.md, marginBottom: spacing.md },
+}));
