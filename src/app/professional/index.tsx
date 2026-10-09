@@ -104,6 +104,16 @@ export default function ProfessionalHome() {
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
               </Pressable>
             </Link>
+             <Link href="/professional/team" asChild>
+              <Pressable style={styles.profileRow}>
+                <Ionicons name="people-outline" size={28} color={colors.accentDark} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileTitle}>My team</Text>
+                  <Text style={styles.profileHint}>Who takes bookings and what they do</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+              </Pressable>
+            </Link>
             <View style={styles.grid}>
               <Tile href="/professional/bookings" icon="calendar-outline" label="Bookings" count={newRequests} />
               <MessagesButton style={styles.messagesTile} />
