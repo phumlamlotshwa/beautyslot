@@ -64,12 +64,11 @@ export default function ProfessionalHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // The banner at the top is black, so the clock and battery are white here
   useFocusEffect(
     useCallback(() => {
       StatusBar.setBarStyle('light-content');
       return () => StatusBar.setBarStyle(scheme === 'dark' ? 'light-content' : 'dark-content');
-    }, [scheme])
+    }, [scheme]),
   );
 
   useFocusEffect(
@@ -77,39 +76,50 @@ export default function ProfessionalHome() {
       async function loadHome() {
         setError(null);
 
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
           setLoading(false);
           return;
         }
 
+        const now = new Date().toISOString();
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
         const startOfTomorrow = new Date(startOfToday);
         startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
-        const [{ data, error: loadError }, { count }, { count: today }, { data: me }] = await Promise.all([
-          supabase
-            .from('services')
-            .select('id, name, category, offered_at, price, duration_minutes')
-            .eq('professional_id', user.id)
-            .order('created_at', { ascending: true }),
-          supabase
-            .from('bookings')
-            .select('id', { count: 'exact', head: true })
-            .eq('professional_id', user.id)
-            .eq('status', 'pending')
-            .gte('starts_at', new Date().toISOString()),
-          supabase
-            .from('bookings')
-            .select('id', { count: 'exact', head: true })
-            .eq('professional_id', user.id)
-            .eq('status', 'confirmed')
-            .gte('starts_at', startOfToday.toISOString())
-            .lt('starts_at', startOfTomorrow.toISOString()),
-          supabase.from('professionals').select('first_name, avatar_path').eq('id', user.id).single(),
-        ]);
+        const [{ data, error: loadError }, { count: pending }, { count: changes }, { count: today }, { data: me }] =
+          await Promise.all([
+            supabase
+              .from('services')
+              .select('id, name, category, offered_at, price, duration_minutes')
+              .eq('professional_id', user.id)
+              .order('created_at', { ascending: true }),
+            supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .eq('professional_id', user.id)
+              .eq('status', 'pending')
+              .gte('starts_at', now),
+            supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .eq('professional_id', user.id)
+              .eq('status', 'confirmed')
+              .not('requested_starts_at', 'is', null)
+              .gte('starts_at', now),
+            supabase
+              .from('bookings')
+              .select('id', { count: 'exact', head: true })
+              .eq('professional_id', user.id)
+              .eq('status', 'confirmed')
+              .gte('starts_at', startOfToday.toISOString())
+              .lt('starts_at', startOfTomorrow.toISOString()),
+            supabase.from('professionals').select('first_name, avatar_path').eq('id', user.id).single(),
+          ]);
 
         if (loadError) {
           setError(loadError.message);
@@ -117,7 +127,7 @@ export default function ProfessionalHome() {
           setServices((data ?? []) as Service[]);
         }
 
-        setNewRequests(count ?? 0);
+        setNewRequests((pending ?? 0) + (changes ?? 0));
         setTodayCount(today ?? 0);
         if (me) {
           setFirstName(me.first_name);
@@ -127,7 +137,7 @@ export default function ProfessionalHome() {
       }
 
       loadHome();
-    }, [])
+    }, []),
   );
 
   async function handleLogOut() {
@@ -138,9 +148,7 @@ export default function ProfessionalHome() {
   let todayText = ' ';
   if (todayCount !== null) {
     todayText =
-      todayCount === 0
-        ? 'Nothing booked for today'
-        : `${todayCount} booking${todayCount === 1 ? '' : 's'} today`;
+      todayCount === 0 ? 'Nothing booked for today' : `${todayCount} booking${todayCount === 1 ? '' : 's'} today`;
   }
 
   return (
@@ -262,7 +270,13 @@ const useStyles = makeStyles((colors) => ({
     marginTop: 4,
   },
   content: { padding: spacing.xl, paddingBottom: 48 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md, marginBottom: spacing.lg },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.md,
+    marginBottom: spacing.lg,
+  },
   tile: {
     width: '48%',
     alignItems: 'center',
@@ -306,7 +320,14 @@ const useStyles = makeStyles((colors) => ({
   addText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.onAccent },
   emptyBox: { alignItems: 'center', marginTop: spacing.xl, paddingHorizontal: spacing.lg },
   emptyTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginTop: spacing.md },
-  emptyText: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  emptyText: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
