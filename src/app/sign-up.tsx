@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Href, Link, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -45,6 +46,7 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isAdult, setIsAdult] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +56,7 @@ export default function SignUp() {
     if (!lastName.trim()) return 'Add your last name.';
     if (!email.trim()) return 'Add your email address.';
     if (password.length < 6) return 'Your password needs at least 6 characters.';
+    if (!isAdult) return "Tick the box to confirm you're 18 or older.";
     return null;
   }
 
@@ -204,6 +207,17 @@ export default function SignUp() {
         </View>
         <Text style={ui.help}>At least 6 characters.</Text>
 
+        <Pressable
+          style={styles.checkRow}
+          onPress={() => setIsAdult((a) => !a)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: isAdult }}
+          hitSlop={6}
+        >
+          <Ionicons name={isAdult ? 'checkbox' : 'square-outline'} size={24} color={colors.text} />
+          <Text style={styles.checkText}>I'm 18 or older</Text>
+        </Pressable>
+
         {error && <Text style={ui.error}>{error}</Text>}
 
         <Pressable style={[ui.button, loading && ui.buttonDisabled]} onPress={handleSignUp} disabled={loading}>
@@ -226,6 +240,8 @@ export default function SignUp() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
+  checkText: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
   lead: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23, color: colors.textMuted, marginBottom: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.md },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
