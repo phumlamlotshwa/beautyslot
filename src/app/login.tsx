@@ -42,7 +42,9 @@ export default function LogIn() {
       if (message.includes('invalid login credentials')) {
         setError("That email and password don't match. Check them and try again.");
       } else if (message.includes('not confirmed')) {
-        setError('Confirm your email first. Open the link we sent to your inbox.');
+        setLoading(false);
+        router.push({ pathname: '/verify-email', params: { email: email.trim(), resend: '1' } });
+        return;
       } else {
         setError(logInError?.message ?? "You weren't logged in. Check your connection and try again.");
       }
