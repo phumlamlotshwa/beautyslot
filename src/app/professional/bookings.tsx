@@ -417,7 +417,7 @@ export default function ProfessionalBookings() {
                   size={28}
                 />
                 <Text style={styles.lineText}>
-                  {item.customers?.first_name} {item.customers?.last_name}
+                  {item.customers ? `${item.customers.first_name} ${item.customers.last_name}` : 'Deleted account'}
                 </Text>
               </View>
               <View style={styles.line}>

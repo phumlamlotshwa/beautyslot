@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { Avatar } from '../../components/avatar';
+import { DeleteAccount } from '../../components/delete-account';
 import { NameDialog } from '../../components/name-dialog';
 import { PhotoEditor } from '../../components/photo-editor';
 import { ThemePicker } from '../../components/theme-picker';
@@ -410,6 +411,7 @@ export default function ProfessionalProfile() {
       )}
 
       <ThemePicker />
+      <DeleteAccount />
 
       <NameDialog
         visible={dialog !== null}
