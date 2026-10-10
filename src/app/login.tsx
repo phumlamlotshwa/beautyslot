@@ -103,6 +103,12 @@ export default function LogIn() {
           </Pressable>
         </View>
 
+        <Link href={{ pathname: '/forgot-password', params: { email: email.trim() } }} asChild>
+          <Pressable style={styles.forgot} hitSlop={8}>
+            <Text style={styles.forgotText}>Forgot your password?</Text>
+          </Pressable>
+        </Link>
+
         {error && <Text style={ui.error}>{error}</Text>}
 
         <Pressable style={[ui.button, loading && ui.buttonDisabled]} onPress={handleLogIn} disabled={loading}>
@@ -127,6 +133,8 @@ const useStyles = makeStyles((colors) => ({
   passwordInput: { paddingRight: 64 },
   showButton: { position: 'absolute', right: spacing.md },
   showText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
+  forgot: { alignSelf: 'flex-end', marginTop: spacing.sm },
+  forgotText: { fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: spacing.xl },
   footerLink: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text, textDecorationLine: 'underline' },
 }));
