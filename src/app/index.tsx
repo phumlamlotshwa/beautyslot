@@ -75,6 +75,12 @@ export default function Welcome() {
             <Text style={styles.secondaryText}>Log in</Text>
           </Pressable>
         </Link>
+
+        <Link href="/customer" asChild>
+          <Pressable style={styles.guestButton} hitSlop={8}>
+          <Text style={styles.guestText}>Browse as a guest</Text>
+          </Pressable>
+        </Link>
       </View>
     </View>
   );
@@ -87,7 +93,7 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.header,
     paddingHorizontal: spacing.xl,
     paddingTop: 96,
-    paddingBottom: 48,
+    paddingBottom: 40,
     justifyContent: 'space-between',
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -121,4 +127,6 @@ const useStyles = makeStyles((colors) => ({
     marginTop: spacing.md,
   },
   secondaryText: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.onHeader },
+  guestButton: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: spacing.lg },
+  guestText: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.onHeader, textDecorationLine: 'underline' },
 }));

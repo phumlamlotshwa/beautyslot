@@ -17,6 +17,7 @@ import { shortAddress } from '../../lib/location';
 
 type Booking = {
   id: number;
+  professional_id: string;
   starts_at: string;
   previous_starts_at: string | null;
   requested_starts_at: string | null;
@@ -129,7 +130,7 @@ export default function MyBookings() {
     const { data, error: loadError } = await supabase
       .from('bookings')
       .select(
-        'id, starts_at, previous_starts_at, requested_starts_at, declined_starts_at, change_reason, reference_photo_id, reference_path, agreed_price, proposed_price, price_reason, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)',
+        'id, professional_id, starts_at, previous_starts_at, requested_starts_at, declined_starts_at, change_reason, reference_photo_id, reference_path, agreed_price, proposed_price, price_reason, status, location_type, address, call_out_fee, services(name, price), professionals(first_name, last_name, avatar_path), staff(name)',
       )
       .eq('customer_id', user.id)
       .order('starts_at', { ascending: true });
@@ -384,16 +385,23 @@ export default function MyBookings() {
                 </View>
               </View>
 
-              <View style={styles.personRow}>
+              <Pressable
+                style={styles.personRow}
+                onPress={() =>
+                  router.push({ pathname: '/customer/professional/[id]', params: { id: item.professional_id } })
+                }
+                hitSlop={6}
+              >
                 <Avatar
                   name={item.professionals?.first_name ?? '?'}
                   url={professionalPhotoUrl(item.professionals?.avatar_path ?? null)}
                   size={28}
                 />
-                <Text style={styles.lineText}>
+                <Text style={styles.personName}>
                   {item.professionals?.first_name} {item.professionals?.last_name}
                 </Text>
-              </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              </Pressable>
 
               {stylist && (
                 <View style={styles.line}>
@@ -600,6 +608,7 @@ const useStyles = makeStyles((colors) => ({
   badge: { borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 },
   badgeText: { fontFamily: fonts.semiBold, fontSize: 12 },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  personName: { flex: 1, fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
   line: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   lineText: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
   oldTime: {

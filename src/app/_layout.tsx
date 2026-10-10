@@ -84,6 +84,7 @@ function AppStack() {
         <Stack.Screen name="chat/[conversationId]" options={{ title: 'Chat' }} />
         <Stack.Screen name="messages" options={{ title: 'Messages' }} />
         <Stack.Screen name="professional/home-visits" options={{ title: 'House calls' }} />
+        <Stack.Screen name="professional/address" options={{ title: 'Business address' }} />
         <Stack.Screen name="professional/reschedule/[bookingId]" options={{ title: 'Suggest a new time' }} />
         <Stack.Screen name="professional/profile" options={{ title: 'My profile' }} />
         <Stack.Screen name="customer/profile" options={{ title: 'My profile' }} />

@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Link, router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Toggle } from '../../components/toggle';
-import { AddressInput } from '../../components/address-input';
-import { Place } from '../../lib/maps';
+import { shortAddress } from '../../lib/location';
 import { supabase } from '../../lib/supabase';
 import { fonts, radius, spacing } from '../../lib/theme';
 import { makeStyles, useTheme } from '../../lib/theme-context';
@@ -18,8 +17,7 @@ export default function HouseCalls() {
   const ui = useUi();
   const styles = useStyles();
   const { colors } = useTheme();
-  const [base, setBase] = useState<Place | null>(null);
-  const [savedArea, setSavedArea] = useState('');
+  const [baseAddress, setBaseAddress] = useState<string | null>(null);
   const [baseFee, setBaseFee] = useState('');
   const [chargeByDistance, setChargeByDistance] = useState(false);
   const [includedKm, setIncludedKm] = useState('');
@@ -39,32 +37,22 @@ export default function HouseCalls() {
       }
 
       const [{ data: privateData }, { data: professional }] = await Promise.all([
-        supabase
-          .from('professional_private')
-          .select('base_address, base_lat, base_lng')
-          .eq('professional_id', user.id)
-          .maybeSingle(),
+        supabase.from('professional_private').select('base_address').eq('professional_id', user.id).maybeSingle(),
         supabase
           .from('professionals')
-          .select('location, call_out_fee, call_out_included_km, call_out_per_km, max_travel_km')
+          .select('call_out_fee, call_out_included_km, call_out_per_km, max_travel_km')
           .eq('id', user.id)
           .single(),
       ]);
 
-      if (professional?.location) setSavedArea(professional.location);
+      if (privateData && professional) {
+        setBaseFee(String(professional.call_out_fee));
+        setMaxKm(professional.max_travel_km !== null ? String(professional.max_travel_km) : '');
 
-      if (privateData) {
-        setBase({ address: privateData.base_address, lat: privateData.base_lat, lng: privateData.base_lng });
-
-        if (professional) {
-          setBaseFee(String(professional.call_out_fee));
-          setMaxKm(professional.max_travel_km !== null ? String(professional.max_travel_km) : '');
-
-          if (Number(professional.call_out_per_km) > 0) {
-            setChargeByDistance(true);
-            setIncludedKm(String(professional.call_out_included_km));
-            setPerKm(String(professional.call_out_per_km));
-          }
+        if (Number(professional.call_out_per_km) > 0) {
+          setChargeByDistance(true);
+          setIncludedKm(String(professional.call_out_included_km));
+          setPerKm(String(professional.call_out_per_km));
         }
       }
 
@@ -74,7 +62,24 @@ export default function HouseCalls() {
     loadSettings();
   }, []);
 
-  const area = base?.area || savedArea;
+  useFocusEffect(
+    useCallback(() => {
+      async function loadAddress() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await supabase
+          .from('professional_private')
+          .select('base_address')
+          .eq('professional_id', user.id)
+          .maybeSingle();
+
+        setBaseAddress(data?.base_address ?? null);
+      }
+
+      loadAddress();
+    }, [])
+  );
 
   const fee = toNumber(baseFee);
   const included = chargeByDistance ? toNumber(includedKm || '0') : 0;
@@ -84,12 +89,12 @@ export default function HouseCalls() {
   async function handleSave() {
     setError(null);
 
-    if (!base) {
-      setError('Search for your address and pick it from the list.');
+    if (!baseAddress) {
+      setError('Add your business address first.');
       return;
     }
     if (baseFee === '' || isNaN(fee) || fee < 0) {
-      setError('Add your call-out fee. Put 0 if you don\u2019t charge one.');
+      setError("Add your call-out fee. Put 0 if you don't charge one.");
       return;
     }
     if (chargeByDistance) {
@@ -117,24 +122,9 @@ export default function HouseCalls() {
       return;
     }
 
-    const { error: privateError } = await supabase.from('professional_private').upsert({
-      professional_id: user.id,
-      base_address: base.address,
-      base_lat: base.lat,
-      base_lng: base.lng,
-      updated_at: new Date().toISOString(),
-    });
-
-    if (privateError) {
-      setError(privateError.message);
-      setSaving(false);
-      return;
-    }
-
     const { error: settingsError } = await supabase
       .from('professionals')
       .update({
-        ...(area ? { location: area } : {}),
         call_out_fee: fee,
         call_out_included_km: included,
         call_out_per_km: rate,
@@ -145,7 +135,7 @@ export default function HouseCalls() {
     setSaving(false);
 
     if (settingsError) {
-      setError(settingsError.message);
+      setError("Your prices weren't saved. Check your connection and try again.");
       return;
     }
 
@@ -167,20 +157,16 @@ export default function HouseCalls() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
       <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <View style={styles.cardTitleRow}>
+        <Link href="/professional/address" asChild>
+          <Pressable style={styles.addressRow}>
             <Ionicons name="location-outline" size={20} color={colors.text} />
-            <Text style={styles.cardTitle}>Where you work from</Text>
-          </View>
-          <Text style={styles.cardHelp}>Your full address is private. Customers only see your area.</Text>
-          <AddressInput value={base} onChange={setBase} />
-          {area ? (
-            <View style={styles.areaRow}>
-              <Ionicons name="eye-outline" size={15} color={colors.text} />
-              <Text style={styles.areaText}>Customers will see: {area}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.addressTitle}>Business address</Text>
+              <Text style={styles.addressText}>{baseAddress ? shortAddress(baseAddress) : 'Not added yet'}</Text>
             </View>
-          ) : null}
-        </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </Pressable>
+        </Link>
 
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
@@ -190,13 +176,9 @@ export default function HouseCalls() {
 
           <Text style={styles.fieldLabel}>Call-out fee (R)</Text>
           <TextInput style={ui.input} value={baseFee} onChangeText={setBaseFee} keyboardType="decimal-pad" />
-          <Text style={styles.fieldHelp}>Added to every house call. Enter 0 if you don't charge one.</Text>
 
           <View style={styles.switchRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Charge extra for longer distances</Text>
-              <Text style={styles.fieldHelp}>Off means everyone pays the same call-out fee.</Text>
-            </View>
+            <Text style={styles.switchLabel}>Charge extra for longer distances</Text>
             <Toggle value={chargeByDistance} onValueChange={setChargeByDistance} />
           </View>
 
@@ -229,11 +211,6 @@ export default function HouseCalls() {
             placeholder="No limit"
             placeholderTextColor={colors.textFaint}
           />
-          <Text style={styles.fieldHelp}>Optional. Customers further away can't book you for house calls.</Text>
-
-          <Text style={styles.note}>
-            Distances are measured in a straight line from where you work, which is usually a little shorter than the drive.
-          </Text>
         </View>
 
         {error && <Text style={ui.error}>{error}</Text>}
@@ -250,12 +227,19 @@ const useStyles = makeStyles((colors) => ({
   card: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   cardTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
-  cardHelp: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginBottom: spacing.md },
-  areaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
-  areaText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.text },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  addressTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
+  addressText: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, marginTop: 2 },
   row: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   fieldLabel: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.text, marginTop: spacing.md, marginBottom: 6 },
-  fieldHelp: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: 4 },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -265,6 +249,5 @@ const useStyles = makeStyles((colors) => ({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  switchLabel: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
-  note: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.md },
+  switchLabel: { flex: 1, fontFamily: fonts.semiBold, fontSize: 15, color: colors.text },
 }));

@@ -1,6 +1,15 @@
-import { Link, router } from 'expo-router';
+import { Href, Link, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { supabase } from '../lib/supabase';
 import { fonts, radius, spacing } from '../lib/theme';
 import { makeStyles, useTheme } from '../lib/theme-context';
@@ -25,6 +34,8 @@ export default function SignUp() {
   const ui = useUi();
   const styles = useStyles();
   const { colors } = useTheme();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const forBooking = !!returnTo?.startsWith('/customer/book');
 
   const [role, setRole] = useState<Role>('customer');
   const [profession, setProfession] = useState<Profession | null>(null);
@@ -85,54 +96,64 @@ export default function SignUp() {
     }
 
     if (data.session) {
+      if (returnTo && role === 'customer') {
+        router.dismissTo(returnTo as Href);
+        return;
+      }
+      if (returnTo) router.dismissAll();
       router.replace(role === 'customer' ? '/customer' : '/professional');
       return;
     }
 
-    router.replace({ pathname: '/verify-email', params: { email: email.trim() } });
+    router.replace({
+      pathname: '/verify-email',
+      params: returnTo ? { email: email.trim(), returnTo } : { email: email.trim() },
+    });
   }
 
   return (
-    <KeyboardAvoidingView
-      style={ui.screen}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <KeyboardAvoidingView style={ui.screen} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <Text style={ui.title}>Create your account</Text>
 
-        <Text style={[ui.label, { marginTop: 0 }]}>How will you use BeautySlot?</Text>
-        <View style={styles.row}>
-          {roles.map((r) => {
-            const selected = role === r.value;
-            return (
-              <Pressable
-                key={r.value}
-                style={[styles.roleCard, selected && styles.roleCardSelected]}
-                onPress={() => setRole(r.value)}
-              >
-                <Text style={[styles.roleTitle, selected && styles.roleTextSelected]}>{r.title}</Text>
-                <Text style={[styles.roleHint, selected && styles.roleHintSelected]}>{r.hint}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {role === 'professional' && (
+        {forBooking ? (
+          <Text style={styles.lead}>Once you're in, your booking goes through.</Text>
+        ) : (
           <>
-            <Text style={ui.label}>What do you do?</Text>
-            <View style={styles.wrap}>
-              {professions.map((p) => (
-                <Pressable
-                  key={p.value}
-                  style={[ui.chip, profession === p.value && ui.chipSelected]}
-                  onPress={() => setProfession(p.value)}
-                >
-                  <Text style={[ui.chipText, profession === p.value && ui.chipTextSelected]}>{p.label}</Text>
-                </Pressable>
-              ))}
+            <Text style={[ui.label, { marginTop: 0 }]}>How will you use BeautySlot?</Text>
+            <View style={styles.row}>
+              {roles.map((r) => {
+                const selected = role === r.value;
+                return (
+                  <Pressable
+                    key={r.value}
+                    style={[styles.roleCard, selected && styles.roleCardSelected]}
+                    onPress={() => setRole(r.value)}
+                  >
+                    <Text style={[styles.roleTitle, selected && styles.roleTextSelected]}>{r.title}</Text>
+                    <Text style={[styles.roleHint, selected && styles.roleHintSelected]}>{r.hint}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
-            <Text style={ui.help}>Run a salon? Pick what you do most. You can add your team later.</Text>
+
+            {role === 'professional' && (
+              <>
+                <Text style={ui.label}>What do you do?</Text>
+                <View style={styles.wrap}>
+                  {professions.map((p) => (
+                    <Pressable
+                      key={p.value}
+                      style={[ui.chip, profession === p.value && ui.chipSelected]}
+                      onPress={() => setProfession(p.value)}
+                    >
+                      <Text style={[ui.chipText, profession === p.value && ui.chipTextSelected]}>{p.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={ui.help}>Run a salon? Pick what you do most. You can add your team later.</Text>
+              </>
+            )}
           </>
         )}
 
@@ -190,7 +211,7 @@ export default function SignUp() {
 
         <View style={styles.footer}>
           <Text style={ui.muted}>Already have an account?</Text>
-          <Link href="/login" replace asChild>
+          <Link href={{ pathname: '/login', params: returnTo ? { returnTo } : {} }} replace asChild>
             <Pressable hitSlop={8}>
               <Text style={styles.footerLink}>Log in</Text>
             </Pressable>
@@ -202,6 +223,7 @@ export default function SignUp() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  lead: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23, color: colors.textMuted, marginBottom: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.md },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   roleCard: {

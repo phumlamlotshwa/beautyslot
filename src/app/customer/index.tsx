@@ -57,6 +57,7 @@ export default function CustomerHome() {
   const [myName, setMyName] = useState('');
   const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
   const [waitingCount, setWaitingCount] = useState(0);
+  const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
     getStartingLocation().then((location) => {
@@ -92,6 +93,7 @@ export default function CustomerHome() {
         const {
           data: { user },
         } = await supabase.auth.getUser();
+        setIsGuest(!user);
         if (user) {
           const { data: me } = await supabase
             .from('customers')
@@ -177,11 +179,19 @@ export default function CustomerHome() {
           <Text style={styles.greeting}>{myName ? `Hi ${myName}` : 'Hi'}</Text>
           <Text style={styles.bannerTitle}>Book someone near you</Text>
         </View>
-        <Link href="/customer/profile" asChild>
-          <Pressable hitSlop={8}>
-            <Avatar name={myName || '?'} url={myAvatarUrl} size={44} />
-          </Pressable>
-        </Link>
+        {isGuest ? (
+          <Link href={{ pathname: '/login', params: { returnTo: '/customer' } }} asChild>
+            <Pressable style={styles.logInButton} hitSlop={8}>
+              <Text style={styles.logInText}>Log in</Text>
+            </Pressable>
+          </Link>
+        ) : (
+          <Link href="/customer/profile" asChild>
+            <Pressable hitSlop={8}>
+              <Avatar name={myName || '?'} url={myAvatarUrl} size={44} />
+            </Pressable>
+          </Link>
+        )}
       </View>
 
       <FlatList
@@ -190,16 +200,18 @@ export default function CustomerHome() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <>
-            <View style={styles.topRow}>
-              <Link href="/customer/bookings" asChild>
-                <Pressable style={styles.topButton}>
-                  <Ionicons name="calendar-outline" size={20} color={colors.text} />
-                  <Text style={styles.topButtonText}>My bookings</Text>
-                  <CountBadge count={waitingCount} />
-                </Pressable>
-              </Link>
-              <MessagesButton style={{ flex: 1 }} />
-            </View>
+            {!isGuest && (
+              <View style={styles.topRow}>
+                <Link href="/customer/bookings" asChild>
+                  <Pressable style={styles.topButton}>
+                    <Ionicons name="calendar-outline" size={20} color={colors.text} />
+                    <Text style={styles.topButtonText}>My bookings</Text>
+                    <CountBadge count={waitingCount} />
+                  </Pressable>
+                </Link>
+                <MessagesButton style={{ flex: 1 }} />
+              </View>
+            )}
 
             <LocationBar value={customerLocation} onChange={setCustomerLocation} />
 
@@ -260,9 +272,11 @@ export default function CustomerHome() {
           </Link>
         )}
         ListFooterComponent={
-          <Pressable style={styles.logOut} onPress={handleLogOut}>
-            <Text style={styles.logOutText}>Log out</Text>
-          </Pressable>
+          isGuest ? null : (
+            <Pressable style={styles.logOut} onPress={handleLogOut}>
+              <Text style={styles.logOutText}>Log out</Text>
+            </Pressable>
+          )
         }
       />
     </View>
@@ -288,6 +302,14 @@ const useStyles = makeStyles((colors) => ({
     marginTop: 4,
   },
   content: { padding: spacing.xl, paddingBottom: 48 },
+  logInButton: {
+    borderWidth: 1.5,
+    borderColor: colors.onHeader,
+    borderRadius: radius.pill,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,
+  },
+  logInText: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.onHeader },
   topRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   topButton: {
     flex: 1,

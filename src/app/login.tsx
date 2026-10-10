@@ -1,6 +1,15 @@
-import { Link, router } from 'expo-router';
+import { Href, Link, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { getRole } from '../lib/get-role';
 import { supabase } from '../lib/supabase';
 import { fonts, spacing } from '../lib/theme';
@@ -11,6 +20,7 @@ export default function LogIn() {
   const ui = useUi();
   const styles = useStyles();
   const { colors } = useTheme();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -43,7 +53,10 @@ export default function LogIn() {
         setError("That email and password don't match. Check them and try again.");
       } else if (message.includes('not confirmed')) {
         setLoading(false);
-        router.push({ pathname: '/verify-email', params: { email: email.trim(), resend: '1' } });
+        router.push({
+          pathname: '/verify-email',
+          params: returnTo ? { email: email.trim(), resend: '1', returnTo } : { email: email.trim(), resend: '1' },
+        });
         return;
       } else {
         setError(logInError?.message ?? "You weren't logged in. Check your connection and try again.");
@@ -62,15 +75,17 @@ export default function LogIn() {
       return;
     }
 
+    if (returnTo && role === 'customer') {
+      router.dismissTo(returnTo as Href);
+      return;
+    }
+
+    if (returnTo) router.dismissAll();
     router.replace(role === 'customer' ? '/customer' : '/professional');
   }
 
   return (
-    <KeyboardAvoidingView
-      style={ui.screen}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <KeyboardAvoidingView style={ui.screen} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <ScrollView style={ui.screen} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <Text style={ui.title}>Welcome back</Text>
 
@@ -117,7 +132,7 @@ export default function LogIn() {
 
         <View style={styles.footer}>
           <Text style={ui.muted}>New to BeautySlot?</Text>
-          <Link href="/sign-up" replace asChild>
+          <Link href={{ pathname: '/sign-up', params: returnTo ? { returnTo } : {} }} replace asChild>
             <Pressable hitSlop={8}>
               <Text style={styles.footerLink}>Create an account</Text>
             </Pressable>

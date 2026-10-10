@@ -61,6 +61,7 @@ export default function ProfessionalHome() {
   const [todayCount, setTodayCount] = useState<number | null>(null);
   const [firstName, setFirstName] = useState('');
   const [avatarPath, setAvatarPath] = useState<string | null>(null);
+  const [area, setArea] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,7 +120,7 @@ export default function ProfessionalHome() {
               .eq('status', 'confirmed')
               .gte('starts_at', startOfToday.toISOString())
               .lt('starts_at', startOfTomorrow.toISOString()),
-            supabase.from('professionals').select('first_name, avatar_path').eq('id', user.id).single(),
+            supabase.from('professionals').select('first_name, avatar_path, location').eq('id', user.id).single(),
           ]);
 
         if (loadError) {
@@ -133,6 +134,7 @@ export default function ProfessionalHome() {
         if (me) {
           setFirstName(me.first_name);
           setAvatarPath(me.avatar_path);
+          setArea(me.location);
         }
         setLoading(false);
       }
@@ -172,6 +174,16 @@ export default function ProfessionalHome() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <>
+            {!loading && !area && (
+              <Link href="/professional/address" asChild>
+                <Pressable style={styles.reminder}>
+                  <Ionicons name="location-outline" size={22} color={colors.warning} />
+                  <Text style={styles.reminderText}>Add your business address</Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.warning} />
+                </Pressable>
+              </Link>
+            )}
+
             <View style={styles.grid}>
               <Tile href="/professional/bookings" icon="calendar-outline" label="Bookings" count={newRequests} />
               <MessagesButton variant="tile" style={styles.messagesTile} />
@@ -185,6 +197,16 @@ export default function ProfessionalHome() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.linkTitle}>My profile</Text>
                   <Text style={styles.linkHint}>Your photo and pictures of your work</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+              </Pressable>
+            </Link>
+            <Link href="/professional/address" asChild>
+              <Pressable style={styles.linkRow}>
+                <Ionicons name="location-outline" size={22} color={colors.text} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkTitle}>Business address</Text>
+                  <Text style={styles.linkHint}>{area ?? 'Not added yet'}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
               </Pressable>
@@ -253,6 +275,16 @@ export default function ProfessionalHome() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  reminder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  reminderText: { flex: 1, fontFamily: fonts.semiBold, fontSize: 15, lineHeight: 21, color: colors.text },
   banner: {
     flexDirection: 'row',
     alignItems: 'flex-end',

@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { Href, router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +22,7 @@ export default function VerifyEmail() {
   const ui = useUi();
   const styles = useStyles();
   const { colors } = useTheme();
-  const { email, resend } = useLocalSearchParams<{ email: string; resend?: string }>();
+  const { email, resend, returnTo } = useLocalSearchParams<{ email: string; resend?: string; returnTo?: string }>();
 
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
@@ -82,6 +82,12 @@ export default function VerifyEmail() {
       return;
     }
 
+    if (returnTo && role === 'customer') {
+      router.dismissTo(returnTo as Href);
+      return;
+    }
+
+    if (returnTo) router.dismissAll();
     router.replace(role === 'customer' ? '/customer' : '/professional');
   }
 

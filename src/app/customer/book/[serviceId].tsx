@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { AddressInput } from '../../../components/address-input';
 import { Avatar } from '../../../components/avatar';
@@ -45,6 +45,7 @@ export default function BookService() {
   const styles = useStyles();
   const { colors } = useTheme();
   const { serviceId } = useLocalSearchParams<{ serviceId: string }>();
+  const waitingForAccount = useRef(false);
 
   const today = new Date();
   const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -319,6 +320,17 @@ export default function BookService() {
     ]);
   }
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!waitingForAccount.current) return;
+      waitingForAccount.current = false;
+
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) handleConfirm();
+      });
+    }, [handleConfirm])
+  );
+
   function pickWorkPhoto(id: number) {
     setOwnPhotoUri(null);
     setRefPhotoId(refPhotoId === id ? null : id);
@@ -329,20 +341,20 @@ export default function BookService() {
 
     setError(null);
 
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      waitingForAccount.current = true;
+      router.push({ pathname: '/sign-up', params: { returnTo: `/customer/book/${serviceId}` } });
+      return;
+    }
+
     if (isHome && !address) {
       setError('Search for your address and pick it from the list.');
       return;
     }
 
     setConfirming(true);
-
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      setError('Log in again to book.');
-      setConfirming(false);
-      return;
-    }
 
     let referencePath: string | null = null;
     if (ownPhotoUri) {

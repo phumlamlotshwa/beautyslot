@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Link, router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { Avatar } from '../../../components/avatar';
 import { PhotoViewer } from '../../../components/photo-viewer';
@@ -49,6 +49,7 @@ export default function ProfessionalProfile() {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingChat, setOpeningChat] = useState(false);
+  const [canMessage, setCanMessage] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -90,6 +91,7 @@ export default function ProfessionalProfile() {
     if (!professional) return;
 
     setError(null);
+
     setOpeningChat(true);
 
     try {
@@ -101,6 +103,23 @@ export default function ProfessionalProfile() {
       setOpeningChat(false);
     }
   }
+
+  useFocusEffect(
+    useCallback(() => {
+      async function checkChat() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setCanMessage(false);
+          return;
+        }
+
+        const { data } = await supabase.rpc('chat_is_open', { p_customer_id: user.id, p_professional_id: id });
+        setCanMessage(data === true);
+      }
+
+      checkChat();
+    }, [id])
+  );
 
   if (loading) {
     return (
@@ -153,20 +172,22 @@ export default function ProfessionalProfile() {
               </View>
             </View>
 
-            <Pressable
-              style={[styles.messageButton, openingChat && ui.buttonDisabled]}
-              onPress={handleMessage}
-              disabled={openingChat}
-            >
-              {openingChat ? (
-                <ActivityIndicator color={colors.text} />
-              ) : (
-                <>
-                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.text} />
-                  <Text style={styles.messageText}>Message {firstName}</Text>
-                </>
-              )}
-            </Pressable>
+            {canMessage && (
+              <Pressable
+                style={[styles.messageButton, openingChat && ui.buttonDisabled]}
+                onPress={handleMessage}
+                disabled={openingChat}
+              >
+                {openingChat ? (
+                  <ActivityIndicator color={colors.text} />
+                ) : (
+                  <>
+                    <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.text} />
+                    <Text style={styles.messageText}>Message {firstName}</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
 
             {error && <Text style={ui.error}>{error}</Text>}
 
