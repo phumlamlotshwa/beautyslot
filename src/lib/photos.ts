@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from './supabase';
 
 export type PhotoSource = 'library' | 'camera';
-type Bucket = 'professional-photos' | 'customer-photos';
+type Bucket = 'professional-photos' | 'customer-photos' | 'booking-photos';
 
 export async function pickPhoto(source: PhotoSource, square: boolean): Promise<string | null> {
   const permission =

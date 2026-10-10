@@ -6,6 +6,7 @@ import { Avatar } from '../../components/avatar';
 import { DeleteAccount } from '../../components/delete-account';
 import { NameDialog } from '../../components/name-dialog';
 import { PhotoEditor } from '../../components/photo-editor';
+import { PrivacyLink } from '../../components/privacy-link';
 import { ThemePicker } from '../../components/theme-picker';
 import { professionLabels } from '../../lib/format';
 import { deletePhoto, PhotoSource, pickPhoto, professionalPhotoUrl, uploadPhoto } from '../../lib/photos';
@@ -411,6 +412,7 @@ export default function ProfessionalProfile() {
       )}
 
       <ThemePicker />
+      <PrivacyLink />
       <DeleteAccount />
 
       <NameDialog

@@ -14,6 +14,7 @@ import {
 import { AddressInput } from '../../components/address-input';
 import { Avatar } from '../../components/avatar';
 import { DeleteAccount } from '../../components/delete-account';
+import { PrivacyLink } from '../../components/privacy-link';
 import { ThemePicker } from '../../components/theme-picker';
 import { deleteAddress, getSavedAddresses, SavedAddress, saveAddress, shortAddress } from '../../lib/location';
 import { Place } from '../../lib/maps';
@@ -306,6 +307,7 @@ export default function CustomerProfile() {
         </View>
 
         <ThemePicker />
+        <PrivacyLink />
         <DeleteAccount />
       </ScrollView>
     </KeyboardAvoidingView>

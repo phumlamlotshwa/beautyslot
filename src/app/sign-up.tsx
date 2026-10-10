@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { PrivacyLink } from '../components/privacy-link';
 import { supabase } from '../lib/supabase';
 import { fonts, radius, spacing } from '../lib/theme';
 import { makeStyles, useTheme } from '../lib/theme-context';
@@ -217,6 +218,8 @@ export default function SignUp() {
             </Pressable>
           </Link>
         </View>
+
+        <PrivacyLink />
       </ScrollView>
     </KeyboardAvoidingView>
   );
